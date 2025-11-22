@@ -1,5 +1,6 @@
-console.log("JS is synced!");
+console.log("Script loaded");
 
+//Lenis scroll and Scroll trigger integration
 gsap.registerPlugin(ScrollTrigger);
 
 const lenis = new Lenis({
@@ -8,6 +9,9 @@ const lenis = new Lenis({
   duration: 0.9,
   anchors: true,
 });
+
+window.lenis = lenis;
+
 lenis.on("scroll", ScrollTrigger.update);
 gsap.ticker.add((time) => {
   lenis.raf(time * 1000);
@@ -44,22 +48,13 @@ document.addEventListener("DOMContentLoaded", () => {
   let lenisIntro = null;
   let lenisMain = null;
 
-  if (!enterScreen || !introSection || !mainContent) {
-    console.warn("One or more layers not found:", {
-      enterScreen,
-      introSection,
-      mainContent,
-    });
-    return;
-  }
-
   window.scrollTo(0, 0);
 
   showLayer(enterScreen);
   hideLayer(introSection);
   hideLayer(mainContent);
 
-  // --- LENIS ---
+  // --- LENIS for sections ---
   function enableIntroLenis() {
     if (lenisIntro) return;
     lenisIntro = new Lenis({
@@ -152,18 +147,98 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  // ...existing code...
   function finishIntroTransition() {
-    disableScroll(introSection);
-    hideLayer(introSection);
-    showLayer(mainContent);
-    enableScroll(mainContent);
-    setTopZ(mainContent);
-    enableMainLenis();
-    destroyIntroLenis();
-    sessionStorage.setItem("introDone", "true");
+    // если GSAP доступен — сначала анимируем скрытие intro, затем показываем main и widget
+    if (typeof gsap !== "undefined") {
+      const tl = gsap.timeline({ defaults: { ease: "power2.inOut" } });
+
+      // элемент фонового канваса (может иметь id или класс)
+      const bgEl =
+        document.querySelector(".intro-bg-image") ||
+        document.getElementById("pixi-canvas-container");
+
+      // гарантируем начальное видимое состояние перед анимацией
+      gsap.set(introSection, { autoAlpha: 1, filter: "blur(0px)" });
+      if (bgEl) gsap.set(bgEl, { autoAlpha: 1, filter: "blur(0px)" });
+
+      // отключаем взаимодействие с intro во время анимации (на старте анимации)
+      // и плавно фейдим + блюрим intro; по завершении — скрываем и активируем main
+      tl.to(
+        introSection,
+        {
+          autoAlpha: 0, // анимирует opacity и visibility
+          filter: "blur(18px)",
+          duration: 0.9,
+          onStart: () => {
+            introSection.style.pointerEvents = "none";
+          },
+          onComplete: () => {
+            // выполняем скрытие/переключение только после завершения анимации
+            disableScroll(introSection);
+            hideLayer(introSection);
+            showLayer(mainContent);
+            enableScroll(mainContent);
+            setTopZ(mainContent);
+            enableMainLenis();
+            destroyIntroLenis();
+            sessionStorage.setItem("introDone", "true");
+          },
+        },
+        0
+      );
+
+      // Параллельная и точно такая же анимация для фонового изображения/канваса
+      if (bgEl) {
+        tl.to(
+          bgEl,
+          {
+            autoAlpha: 0,
+            filter: "blur(18px)",
+            duration: 0.9,
+            onStart: () => {
+              bgEl.style.pointerEvents = "none";
+            },
+          },
+          0 // запуск в параллель с анимацией introSection
+        );
+      }
+
+      // затем анимируем появление виджета (main-content элемент)
+      tl.to(
+        ".main-content",
+        {
+          autoAlpha: 1,
+          filter: "blur(0px)",
+          delay: 0.5,
+          duration: 1,
+          ease: "power2.out",
+          overwrite: true,
+        },
+        ">"
+      );
+    } else {
+      // fallback — без анимации
+      const bgEl =
+        document.querySelector(".intro-bg-image") ||
+        document.getElementById("pixi-canvas-container");
+      disableScroll(introSection);
+      hideLayer(introSection);
+      if (bgEl) {
+        bgEl.style.visibility = "hidden";
+        bgEl.style.opacity = "0";
+        bgEl.style.pointerEvents = "none";
+      }
+      showLayer(mainContent);
+      enableScroll(mainContent);
+      setTopZ(mainContent);
+      enableMainLenis();
+      destroyIntroLenis();
+      sessionStorage.setItem("introDone", "true");
+    }
   }
 
-  // --- РҐРµР»РїРµСЂС‹ ---
+  // --- Helpers ---
   function showLayer(layer) {
     layer.classList.add("layer-active");
     layer.style.visibility = "visible";
@@ -205,7 +280,6 @@ document.addEventListener("DOMContentLoaded", () => {
 //--Howler for bg music and initial animation
 
 $(function () {
-  // Gate: SFX allowed only after user chooses entry option
   let started = false;
   let introPlayed = false; // prevent double intro
 
@@ -225,63 +299,14 @@ $(function () {
     "https://cdn.jsdelivr.net/gh/bogdankolomiyets/memory-remix@main/assets/music/background%20music.mp3?v=" +
     Date.now();
 
-  // Howler sounds
+  // Howler background music
   let bg = new Howl({
     src: [bgSrc],
     volume: 0.5,
     loop: true,
   });
 
-  const clickSound = new Howl({
-    src: [
-      "https://cdn.jsdelivr.net/gh/bogdankolomiyets/memory-remix@main/assets/sfx/click.mp3",
-    ],
-    volume: 0.3,
-  });
-
-  const hoverSound = new Howl({
-    src: [
-      "https://cdn.jsdelivr.net/gh/bogdankolomiyets/memory-remix@main/assets/sfx/hover-pop.mp3",
-    ],
-    volume: 0.1,
-  });
-
-  // End intro sound
-  const endIntroSfx = new Howl({
-    src: [
-      "https://cdn.jsdelivr.net/gh/bogdankolomiyets/memory-remix@main/assets/sfx/click.mp3",
-    ],
-    volume: 0.3,
-  });
-
-  // BG music fade out
-  // Объявляем переменную-флаг вне функции
-  let endIntroPlayed = false;
-
-  // В функции fadeOutMusicAndPlaySfx заменяем строку:
-  function fadeOutMusicAndPlaySfx(done) {
-    if (bg.playing()) {
-      bg.fade(bg.volume(), 0, 1200);
-      setTimeout(() => {
-        bg.stop();
-        // Проверяем флаг, чтобы проиграть только один раз
-        if (!endIntroPlayed) {
-          endIntroSfx.play();
-          endIntroPlayed = true; // выставляем флаг
-        }
-        if (typeof done === "function") done();
-      }, 1250);
-    } else {
-      // Аналогично для случая, если музыка не играет
-      if (!endIntroPlayed) {
-        endIntroSfx.play();
-        endIntroPlayed = true; // выставляем флаг
-      }
-      if (typeof done === "function") done();
-    }
-  }
-
-  // Function to reload bg music with cache busting
+  // BG music reload function with cache busting
   function reloadBgMusic() {
     if (bg) {
       bg.unload(); // unload previous sound
@@ -297,7 +322,17 @@ $(function () {
   }
 
   // Global function
-  window.fadeOutMusicAndPlaySfx = fadeOutMusicAndPlaySfx;
+  window.fadeOutMusicAndPlaySfx = function (done) {
+    if (bg.playing()) {
+      bg.fade(bg.volume(), 0, 1200);
+      setTimeout(() => {
+        bg.stop();
+        if (typeof done === "function") done();
+      }, 1250);
+    } else {
+      if (typeof done === "function") done();
+    }
+  };
 
   // Sound toggle UI sync (.sound-toggle uses .is-muted + aria)
   function updateSoundButton() {
@@ -389,19 +424,216 @@ $(function () {
     updateSoundButton();
   });
 
-  // SFX gating
-  $("[sound-click]").on("click", function () {
-    if (!started) return;
-    clickSound.play();
-  });
-
-  $("[sound-hover]").on("mouseenter", function () {
-    if (!started) return;
-    hoverSound.play();
-  });
-
   // Init UI state
   updateSoundButton();
+});
+
+//------------
+//=======bg animation (PIXI.js)===========
+(async () => {
+  // Инициализация PIXI
+  const app = new PIXI.Application();
+
+  await app.init({ resizeTo: window });
+
+  // Получаем контейнер
+  const containerElement = document.getElementById("pixi-canvas-container");
+
+  // Добавляем canvas в контейнер и растягиваем его на всю ширину и высоту
+  app.view.style.width = "100%";
+  app.view.style.height = "100%";
+  app.view.style.display = "block";
+
+  containerElement.appendChild(app.view);
+
+  // Загружаем изображения
+  const bgImages = [
+    "bg-img-1.webp",
+    "bg-img-2.webp",
+    "bg-img-3.webp",
+    "bg-img-4.webp",
+    "bg-img-5.webp",
+  ].map(
+    (img) =>
+      `https://cdn.jsdelivr.net/gh/bogdankolomiyets/memory-remix@main/assets/images/${img}`
+  );
+
+  await PIXI.Assets.load([
+    ...bgImages,
+    "https://cdn.jsdelivr.net/gh/bogdankolomiyets/memory-remix@main/assets/images/dmaps/2048x2048/fibers.jpg",
+  ]);
+
+  app.stage.eventMode = "static";
+  const container = new PIXI.Container();
+  app.stage.addChild(container);
+
+  // Текущий и следующий спрайты для плавного переключения
+  let currentBg = PIXI.Sprite.from(bgImages[0]);
+  currentBg.alpha = 1;
+  container.addChild(currentBg);
+
+  // Resize function для спрайтов фона
+  function resizeFlagSprite(sprite) {
+    // масштабируем спрайт так, чтобы он покрывал экран без искажения (cover)
+    const sw = app.screen.width;
+    const sh = app.screen.height;
+    const iw = sprite.texture.width || 1;
+    const ih = sprite.texture.height || 1;
+    const scale = Math.max(sw / iw, sh / ih);
+    sprite.scale.set(scale, scale);
+    // центрируем и позиционируем так, чтобы покрывать экран
+    sprite.position.set((sw - iw * scale) / 2, (sh - ih * scale) / 2);
+  }
+  resizeFlagSprite(currentBg);
+
+  // При ресайзе окна меняем размер фонового спрайта
+  window.addEventListener("resize", () => {
+    resizeFlagSprite(currentBg);
+    if (nextBg) resizeFlagSprite(nextBg);
+  });
+
+  // Дисплейсмент-карта
+  const displacementSprite = PIXI.Sprite.from(
+    "https://cdn.jsdelivr.net/gh/bogdankolomiyets/memory-remix@main/assets/images/dmaps/2048x2048/fibers.jpg"
+  );
+  displacementSprite.texture.baseTexture.wrapMode = PIXI.WRAP_MODES.REPEAT;
+  displacementSprite.position = currentBg.position;
+  app.stage.addChild(displacementSprite);
+
+  // Displacement filter
+  const displacementFilter = new PIXI.DisplacementFilter({
+    sprite: displacementSprite,
+    scale: { x: 160, y: 200 },
+  });
+  currentBg.filters = [displacementFilter];
+
+  // Анимация displacement
+  let speed = 0.3;
+  app.ticker.add(() => {
+    displacementSprite.x += speed;
+    if (displacementSprite.x > displacementSprite.width) {
+      displacementSprite.x = 0;
+    }
+  });
+
+  let nextBg = null;
+
+  function changeBackground(index) {
+    if (index < 0 || index >= bgImages.length) return;
+
+    if (nextBg) {
+      container.removeChild(nextBg);
+      nextBg.destroy();
+      nextBg = null;
+    }
+
+    nextBg = PIXI.Sprite.from(bgImages[index]);
+    resizeFlagSprite(nextBg);
+    nextBg.alpha = 0;
+    container.addChild(nextBg);
+
+    nextBg.filters = [displacementFilter];
+
+    gsap.to(currentBg, {
+      alpha: 0,
+      duration: 1,
+      onComplete: () => {
+        container.removeChild(currentBg);
+        currentBg.destroy();
+        currentBg = nextBg;
+        nextBg = null;
+      },
+    });
+
+    gsap.to(nextBg, {
+      alpha: 1,
+      duration: 1,
+    });
+  }
+
+  ScrollTrigger.defaults({ immediateRender: false, ease: "power1.inOut" });
+
+  const scrollTriggers = [
+    { trigger: ".intro-section-2", bgIndex: 1 },
+    { trigger: ".intro-section-3", bgIndex: 2 },
+    { trigger: ".intro-section-4", bgIndex: 3 },
+    { trigger: ".intro-section-welcome", bgIndex: 4 },
+  ];
+
+  scrollTriggers.forEach(({ trigger, bgIndex }) => {
+    ScrollTrigger.create({
+      trigger: trigger,
+      scroller: ".intro",
+      start: "top center",
+      end: "bottom center",
+      onEnter: () => changeBackground(bgIndex),
+      onEnterBack: () => changeBackground(bgIndex),
+      onLeaveBack: () => changeBackground(bgIndex - 1 >= 0 ? bgIndex - 1 : 0),
+    });
+  });
+
+  ScrollTrigger.refresh();
+})();
+
+//=======Nav===========
+function initBoldFullScreenNavigation() {
+  // Existing: Toggle Navigation
+  document
+    .querySelectorAll('[data-navigation-toggle="toggle"]')
+    .forEach((toggleBtn) => {
+      toggleBtn.addEventListener("click", () => {
+        const navStatusEl = document.querySelector("[data-navigation-status]");
+        if (!navStatusEl) return;
+        if (
+          navStatusEl.getAttribute("data-navigation-status") === "not-active"
+        ) {
+          navStatusEl.setAttribute("data-navigation-status", "active");
+          //window.lenis.stop();
+        } else {
+          navStatusEl.setAttribute("data-navigation-status", "not-active");
+          //window.lenis.start();
+        }
+      });
+    });
+
+  // Existing: Close Navigation
+  document
+    .querySelectorAll('[data-navigation-toggle="close"]')
+    .forEach((closeBtn) => {
+      closeBtn.addEventListener("click", () => {
+        const navStatusEl = document.querySelector("[data-navigation-status]");
+        if (!navStatusEl) return;
+        navStatusEl.setAttribute("data-navigation-status", "not-active");
+        //window.lenis.start();
+      });
+    });
+
+  // Existing: Key ESC - Close Navigation
+  document.addEventListener("keydown", (e) => {
+    if (e.keyCode === 27) {
+      const navStatusEl = document.querySelector("[data-navigation-status]");
+      if (!navStatusEl) return;
+      if (navStatusEl.getAttribute("data-navigation-status") === "active") {
+        navStatusEl.setAttribute("data-navigation-status", "not-active");
+        //window.lenis.start();
+      }
+    }
+  });
+
+  // NEW: Close nav when a menu item is clicked
+  document.querySelectorAll(".bold-nav-full__li").forEach((menuItem) => {
+    menuItem.addEventListener("click", () => {
+      const navStatusEl = document.querySelector("[data-navigation-status]");
+      if (!navStatusEl) return;
+      navStatusEl.setAttribute("data-navigation-status", "not-active");
+      //window.lenis.start();
+    });
+  });
+}
+
+// Initialize Bold Full Screen Navigation
+document.addEventListener("DOMContentLoaded", function () {
+  initBoldFullScreenNavigation();
 });
 
 //--On scroll text appear
