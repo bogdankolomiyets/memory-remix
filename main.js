@@ -147,7 +147,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ...existing code...
   function finishIntroTransition() {
     // если GSAP доступен — сначала анимируем скрытие intro, затем показываем main и widget
     if (typeof gsap !== "undefined") {
@@ -161,6 +160,11 @@ document.addEventListener("DOMContentLoaded", () => {
       // гарантируем начальное видимое состояние перед анимацией
       gsap.set(introSection, { autoAlpha: 1, filter: "blur(0px)" });
       if (bgEl) gsap.set(bgEl, { autoAlpha: 1, filter: "blur(0px)" });
+      // Ensure main content and nav start hidden and blurred so they animate in together
+      gsap.set([".main-content", ".bold-nav-full"], {
+        autoAlpha: 0,
+        filter: "blur(18px)",
+      });
 
       // отключаем взаимодействие с intro во время анимации (на старте анимации)
       // и плавно фейдим + блюрим intro; по завершении — скрываем и активируем main
@@ -206,7 +210,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       // затем анимируем появление виджета (main-content элемент)
       tl.to(
-        ".main-content",
+        [".main-content", ".bold-nav-full"],
         {
           autoAlpha: 1,
           filter: "blur(0px)",
@@ -229,6 +233,7 @@ document.addEventListener("DOMContentLoaded", () => {
         bgEl.style.opacity = "0";
         bgEl.style.pointerEvents = "none";
       }
+
       showLayer(mainContent);
       enableScroll(mainContent);
       setTopZ(mainContent);
@@ -608,27 +613,43 @@ function initBoldFullScreenNavigation() {
       });
     });
 
-  // Existing: Key ESC - Close Navigation
-  document.addEventListener("keydown", (e) => {
-    if (e.keyCode === 27) {
-      const navStatusEl = document.querySelector("[data-navigation-status]");
-      if (!navStatusEl) return;
-      if (navStatusEl.getAttribute("data-navigation-status") === "active") {
+  // NEW: Close nav when a menu item is clicked (attribute-driven)
+  // Replace the existing .bold-nav-full__li handler with this
+  document
+    .querySelectorAll(".bold-nav-full__li, [data-closes-library]")
+    .forEach((menuItem) => {
+      menuItem.addEventListener("click", async (e) => {
+        // if element carries the attribute data-closes-library="true" (or present), we will attempt collapse
+        const shouldCloseLibrary =
+          menuItem.dataset.closesLibrary === "true" ||
+          menuItem.hasAttribute("data-closes-library");
+
+        if (
+          shouldCloseLibrary &&
+          library &&
+          library.classList.contains("active")
+        ) {
+          // prevent default navigation/anchor behaviour while we collapse
+          if (e && typeof e.preventDefault === "function") e.preventDefault();
+
+          try {
+            const didCollapse = await collapseLibraryToCompact();
+            console.debug(
+              "menu click: collapseLibraryToCompact result:",
+              didCollapse
+            );
+          } catch (err) {
+            console.error("Error while collapsing library:", err);
+          }
+        }
+
+        // Close the fullscreen nav UI as before (always try to close nav after click)
+        const navStatusEl = document.querySelector("[data-navigation-status]");
+        if (!navStatusEl) return;
         navStatusEl.setAttribute("data-navigation-status", "not-active");
         //window.lenis.start();
-      }
-    }
-  });
-
-  // NEW: Close nav when a menu item is clicked
-  document.querySelectorAll(".bold-nav-full__li").forEach((menuItem) => {
-    menuItem.addEventListener("click", () => {
-      const navStatusEl = document.querySelector("[data-navigation-status]");
-      if (!navStatusEl) return;
-      navStatusEl.setAttribute("data-navigation-status", "not-active");
-      //window.lenis.start();
+      });
     });
-  });
 }
 
 // Initialize Bold Full Screen Navigation
@@ -824,6 +845,110 @@ document.addEventListener("DOMContentLoaded", () => {
   if (initial) setActive(initial);
 })();
 
+//======API Integration=======//
+document.addEventListener("DOMContentLoaded", function () {
+  const API_URL =
+    "https://memory-remix-db-4a9fa1972934.herokuapp.com/api/v1/audio_memories";
+
+  const wrapper = document.querySelector(".memory-cards-list-wrapper");
+
+  if (!wrapper) {
+    console.warn(
+      "Memory Library: не найден wrapper .memory-cards-list-wrapper"
+    );
+    return;
+  }
+
+  // Сохраняем шаблон карточки перед удалением
+  const templateCard = wrapper.querySelector(".memory-card");
+
+  if (!templateCard) {
+    console.warn("Memory Library: не найден template .memory-card");
+    return;
+  }
+
+  // Клонируем шаблон для последующего использования
+  const cardTemplate = templateCard.cloneNode(true);
+
+  // Функция рендера
+  function renderCards(memories) {
+    // Удаляем ВСЕ существующие карточки
+    const allCards = wrapper.querySelectorAll(".memory-card");
+    allCards.forEach((card) => card.remove());
+
+    // Создаём новые карточки для каждого memory
+    memories.forEach((memory) => {
+      const card = cardTemplate.cloneNode(true);
+
+      // Заполняем данные
+      const headerEls = Array.from(
+        card.querySelectorAll(".memory-card-header")
+      );
+      const textEls = Array.from(card.querySelectorAll(".memory-card-text"));
+      const playerEl = card.querySelector(".howler-player");
+
+      if (headerEls.length) {
+        headerEls.forEach((el) => (el.textContent = memory.memory_name || ""));
+      }
+      if (textEls.length) {
+        textEls.forEach((el) => (el.textContent = memory.user_name || ""));
+      }
+      if (playerEl) {
+        playerEl.setAttribute("data-howler-src", memory.audio_url || "");
+        // Ensure the element is discoverable by the Howler init (selector [data-howler])
+        if (!playerEl.hasAttribute("data-howler"))
+          playerEl.setAttribute("data-howler", "");
+      }
+
+      // Убираем display:none если есть
+      card.style.display = "";
+
+      // Добавляем карточку в DOM
+      wrapper.appendChild(card);
+    });
+
+    // После создания всех карточек назначаем обложки
+    if (typeof assignCoversToCards === "function") {
+      assignCoversToCards().catch(console.error);
+    }
+
+    // Инициализируем Howler-плееры для вновь созданных карточек
+    if (typeof initHowlerJSAudioPlayer === "function") {
+      try {
+        initHowlerJSAudioPlayer();
+      } catch (err) {
+        console.error("Error initializing Howler players:", err);
+      }
+    }
+  }
+
+  // Фетч и сортировка
+  function loadMemories() {
+    fetch(API_URL, { cache: "no-store" })
+      .then((response) => {
+        if (!response.ok) throw new Error("Network response was not ok");
+        return response.json();
+      })
+      .then((data) => {
+        // Фильтр по approved
+        const approved = data.filter((item) => item.approved);
+
+        // Сортировка по updated_at (от новых к старым)
+        approved.sort(
+          (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
+        );
+
+        renderCards(approved);
+      })
+      .catch((err) => {
+        console.error("Memory Library fetch error:", err);
+      });
+  }
+
+  // Вызываем на каждой загрузке страницы
+  loadMemories();
+});
+
 //--Import and randomize images
 //=======GIT HUB SETTINGS========
 const GH_USER = "bogdankolomiyets";
@@ -937,78 +1062,728 @@ document.addEventListener("DOMContentLoaded", () => {
 //=======MEMORY LIBRARY========
 const library = document.querySelector(".memory-library-section");
 const background = document.querySelector(".memory-library-bg");
-const cards = document.querySelectorAll(".memory-card");
 const list = document.querySelector(".memory-cards-list-wrapper");
 
+// helper: always work with the up-to-date set of memory cards
+function getMemoryCards() {
+  return Array.from(document.querySelectorAll(".memory-card"));
+}
+
 let isFlipped = false;
+let isAnimating = false;
+let selectedCard = null; // Track which card is selected
 
-let isAnimating = false; // Флаг анимации
+// NEW: remember card to auto-open after flip/active transition
+let openCardAfterFlip = null;
 
-cards.forEach((card) => {
-  card.addEventListener("click", () => {
-    isFlipped = !isFlipped;
-    isAnimating = true; // Начинается flip-анимация
+/**
+ * Recalculate bounds and sync draggable positions
+ */
+window.recalcLibraryDraggable = function recalcLibraryDraggable() {
+  if (!wrapper || !handle || !track) return;
 
-    let state = Flip.getState(
-      ".memory-library-section, .memory-library-bg, .memory-card, .memory-cards-list-wrapper"
-    );
+  const wrapperWidth = wrapper.scrollWidth;
+  const viewportWidth = wrapper.clientWidth;
+  maxScroll = Math.max(0, wrapperWidth - viewportWidth);
+  handleMax = Math.max(0, track.clientWidth - handle.clientWidth);
 
-    library.classList.toggle("active");
-    background.classList.toggle("active");
-    list.classList.toggle("active");
-    cards.forEach((card) => card.classList.toggle("active"));
+  if (wrapperDraggable && typeof wrapperDraggable.applyBounds === "function") {
+    wrapperDraggable.applyBounds({ minX: -maxScroll, maxX: 0 });
+  }
+  if (handleDraggable && typeof handleDraggable.applyBounds === "function") {
+    handleDraggable.applyBounds({ minX: 0, maxX: handleMax });
+  }
 
-    setTimeout(() => {
-      if (lenis && typeof lenis.scrollTo === "function") {
-        lenis.scrollTo(0, {
-          duration: 1.5,
-          easing: (t) => t * (2 - t),
-        });
-      }
-    }, 100);
+  let currentX = gsap.getProperty(wrapper, "x") || 0;
+  if (currentX > 0) currentX = 0;
+  if (currentX < -maxScroll) currentX = -maxScroll;
+  gsap.to(wrapper, { x: currentX, duration: 0.3, ease: "power2.out" });
 
-    Flip.from(state, {
-      scale: true,
-      duration: 2, // 3 секунды анимации
-      rotate: 0,
-      ease: "cubic",
-      onComplete: () => {
-        if (typeof scroller !== "undefined" && scroller.update) {
-          scroller.update();
+  const handleX = maxScroll === 0 ? 0 : (-currentX / maxScroll) * handleMax;
+  gsap.to(handle, { x: handleX, duration: 0.3, ease: "power2.out" });
+
+  if (wrapperDraggable && typeof wrapperDraggable.update === "function")
+    wrapperDraggable.update();
+};
+
+/**
+ * Exit selected state - return to --active (flipped) view
+ */
+window.exitSelectedState = function exitSelectedState() {
+  if (!selectedCard || isAnimating) return;
+  isAnimating = true;
+
+  const clickedCard = selectedCard;
+  const placeholder = clickedCard.__placeholder;
+  const targetRect = placeholder
+    ? placeholder.getBoundingClientRect()
+    : {
+        left: parseFloat(clickedCard.dataset.origLeft) || 0,
+        top: parseFloat(clickedCard.dataset.origTop) || 0,
+        width: Number(clickedCard.dataset.origWidth) || clickedCard.offsetWidth,
+        height:
+          Number(clickedCard.dataset.origHeight) || clickedCard.offsetHeight,
+      };
+
+  const overlay = document.querySelector(".memory-lightbox");
+  const closeBtn = document.querySelector(".memory-lightbox-close");
+  // Stop and reset any Howler player inside the selected card so it starts from beginning next time
+  try {
+    const howlerEl = clickedCard.querySelector(".howler-player,[data-howler]");
+    if (howlerEl) {
+      const hid = howlerEl.id;
+      if (window.howlerSoundInstances && window.howlerSoundInstances[hid]) {
+        try {
+          // stop resets playback to start
+          window.howlerSoundInstances[hid].stop();
+        } catch (e) {
+          console.warn("Failed to stop howler instance", e);
         }
-        isAnimating = false; // Анимация закончена, можно снова включать hover
+      }
+
+      // Reset UI pieces if present
+      const progressText = howlerEl.querySelector(
+        '[data-howler-info="progress"]'
+      );
+      const timelineBar = howlerEl.querySelector(
+        '[data-howler-control="progress"]'
+      );
+      if (progressText) progressText.textContent = "0:00";
+      if (timelineBar) timelineBar.style.width = "0%";
+      howlerEl.setAttribute("data-howler-status", "not-playing");
+    }
+  } catch (e) {
+    console.warn("Error while resetting howler on exitSelectedState", e);
+  }
+  const others = getMemoryCards().filter((c) => c !== clickedCard);
+  const innerEl = clickedCard.querySelector(".memory-card-inner");
+  const selectedContent = clickedCard.querySelector(
+    ".memory-card-selected-content"
+  );
+  const controls = document.querySelector(".memory-library-controls");
+
+  // 0) Сначала анимированно скрываем и удаляем lightbox и кнопку закрыть (параллельно)
+  if (overlay) {
+    gsap.to(overlay, {
+      opacity: 0,
+      duration: 0.2,
+      ease: "power2.out",
+      onComplete: () => {
+        try {
+          overlay.remove();
+        } catch (e) {}
       },
     });
+  }
+  if (closeBtn) {
+    gsap.to(closeBtn, {
+      opacity: 0,
+      duration: 0.12,
+      ease: "power2.out",
+      onComplete: () => {
+        try {
+          closeBtn.remove();
+        } catch (e) {}
+      },
+    });
+  }
 
-    document.body.classList.toggle("alt-mode");
-  });
-});
+  // Timeline:
+  // 1) скрыть выбранный контент + вернуть rotateY,
+  // 2) анимировать карточку обратно к плейсхолдеру,
+  // 3) СБРОСИТЬ inline-стили/классы/data и вернуть карточку в поток DOM (выполняется ПЕРЕД появлением других карточек),
+  // 4) показать контролы и остальные карточки,
+  // 5) финал (recalc, включение draggable/lenis)
+  const tl = gsap.timeline({
+    onComplete: () => {
+      // 1) Очистим inline-filter у всех карточек (на всякий случай)
+      document.querySelectorAll(".memory-card").forEach((c) => {
+        c.style.filter = "";
+      });
 
-//------Card hover animation
-cards.forEach((card) => {
-  const inner = card.querySelector(".memory-card-inner");
+      // 2) Уберём класс grayscale у всех карточек — возвращаем все в цветное состояние
+      document.querySelectorAll(".memory-card.grayscale").forEach((c) => {
+        c.classList.remove("grayscale");
+      });
 
-  gsap.set(inner, { rotateY: 0, transformOrigin: "50% 50%" });
-  gsap.set(card, { y: 0, xPercent: 0 });
-
-  card.addEventListener("mouseenter", () => {
-    if (isAnimating) return; // блокируем hover во время flip
-
-    cards.forEach((otherCard) => {
-      if (otherCard !== card) {
-        otherCard.classList.add("grayscale");
+      // Финал — включаем draggable/lenis, снимаем флаг анимации и пересчитываем bounds
+      if (wrapperDraggable && typeof wrapperDraggable.enable === "function") {
+        wrapperDraggable.enable();
       }
+      if (
+        typeof lenis !== "undefined" &&
+        lenis &&
+        typeof lenis.start === "function"
+      ) {
+        lenis.start();
+      }
+
+      isAnimating = false;
+      selectedCard = null;
+
+      if (typeof window.recalcLibraryDraggable === "function") {
+        window.recalcLibraryDraggable();
+      }
+    },
+  });
+
+  // 1) скрываем контент и возвращаем rotateY
+  // reverse card-specific front/back animation: backContent -> hide, hoverInfo -> show
+  const hoverInfo = clickedCard.querySelector(".card-hover-info-wrapper");
+  const backContent = clickedCard.querySelector(".card-back-content-wrap");
+  if (backContent) {
+    tl.to(
+      backContent,
+      { autoAlpha: 0, filter: "blur(12px)", duration: 0.28, ease: "power2.in" },
+      0
+    );
+  }
+  if (hoverInfo) {
+    tl.to(
+      hoverInfo,
+      { autoAlpha: 1, filter: "blur(0px)", duration: 0.36, ease: "power2.out" },
+      0.18
+    );
+  }
+  if (selectedContent) {
+    tl.to(
+      selectedContent,
+      { opacity: 0, filter: "blur(18px)", duration: 0.28 },
+      0
+    );
+  }
+  if (innerEl) {
+    tl.to(innerEl, { rotateY: 0, duration: 0.28, ease: "power2.inOut" }, 0);
+  }
+
+  // 2) перемещаем карточку обратно в её координаты (анимация обратна enterSelectedState)
+  tl.to(
+    clickedCard,
+    {
+      left: targetRect.left + "px",
+      top: targetRect.top + "px",
+      xPercent: 0,
+      yPercent: 0,
+      width: targetRect.width + "px",
+      height: targetRect.height + "px",
+      duration: 0.6,
+      ease: "power3.inOut",
+    },
+    ">0"
+  );
+
+  // 3) После завершения движения — СБРОСИТЬ всё для выбранной карточки и вернуть её в поток DOM
+  tl.add(() => {
+    // Вставляем карточку обратно перед плейсхолдером (если есть), иначе пытаемся вернуть в список
+    try {
+      if (placeholder && placeholder.parentNode) {
+        placeholder.parentNode.insertBefore(clickedCard, placeholder);
+      } else {
+        if (list && list.querySelector(".memory-card")) {
+          list
+            .querySelector(".memory-card")
+            .parentNode.insertBefore(
+              clickedCard,
+              list.querySelector(".memory-card")
+            );
+        }
+      }
+    } catch (e) {
+      console.warn(
+        "Failed to insert selectedCard back to placeholder parent",
+        e
+      );
+    }
+
+    // Удаляем плейсхолдер, если он есть
+    if (placeholder) {
+      placeholder.remove();
+      delete clickedCard.__placeholder;
+    }
+
+    // Сброс inline-стилей выбранной карточки (чтобы вернулась к стилям из CSS)
+    clickedCard.style.position = "";
+    clickedCard.style.left = "";
+    clickedCard.style.top = "";
+    clickedCard.style.width = "";
+    clickedCard.style.height = "";
+    clickedCard.style.margin = "";
+    clickedCard.style.zIndex = "";
+    clickedCard.style.transform = "";
+    clickedCard.style.willChange = "";
+    clickedCard.style.perspective = "";
+    clickedCard.style.webkitPerspective = "";
+
+    if (innerEl) {
+      innerEl.style.backfaceVisibility = "";
+      innerEl.style.transformStyle = "";
+      innerEl.style.transform = "";
+    }
+
+    // Убираем классы, связанные с состоянием selected/expanded/flipped
+    clickedCard.classList.remove("--selected", "is-expanded", "is-flipped");
+    list.classList.remove("--selected");
+
+    // Удаляем сохранённые data-атрибуты
+    clickedCard.removeAttribute("data-orig-left");
+    clickedCard.removeAttribute("data-orig-top");
+    clickedCard.removeAttribute("data-orig-width");
+    clickedCard.removeAttribute("data-orig-height");
+    if (clickedCard.dataset.origZIndex)
+      clickedCard.removeAttribute("data-orig-z-index");
+
+    // Новый: очистим inline `filter`, который мог оставить GSAP — чтобы .grayscale из CSS снова работал
+    // очищаем у всех карточек (включая только что возвращённую)
+    document.querySelectorAll(".memory-card").forEach((c) => {
+      c.style.filter = "";
     });
 
-    const isActive = library.classList.contains("active") || isFlipped;
+    // (overlay и closeBtn уже анимированы и удалены выше)
+  }, ">");
 
-    if (isActive) {
-      gsap.to(inner, {
-        rotateY: 180,
-        duration: 0.6,
-        ease: "power2.inOut",
-        z: 20,
+  // 4) показываем контролы библиотеки (если были скрыты) и остальные карточки
+  if (controls) {
+    tl.to(
+      controls,
+      { opacity: 1, filter: "blur(0px)", duration: 0.36, ease: "power2.out" },
+      "<0.02"
+    );
+  }
+
+  tl.to(
+    others,
+    {
+      x: 0,
+      opacity: 1,
+      filter: "blur(0px)",
+      duration: 0.45,
+      ease: "power2.out",
+      stagger: 0.02,
+    },
+    "<0.05"
+  );
+};
+
+/**
+ * Enter selected state - expand single card (smooth, no jump) + lightbox + close button
+ * height = 80vh, width kept at 3:4 ratio (width = calc(80vh * 3 / 4))
+ */
+window.enterSelectedState = async function enterSelectedState(clickedCard) {
+  if (isAnimating || selectedCard) return;
+  if (!clickedCard.classList.contains("active")) return;
+
+  // Блокируем пользовательские действия на время анимаций
+  isAnimating = true;
+
+  // Если есть draggable — временно дизейблим (как и раньше)
+  if (wrapperDraggable && typeof wrapperDraggable.disable === "function") {
+    wrapperDraggable.disable();
+  }
+  if (
+    typeof lenis !== "undefined" &&
+    lenis &&
+    typeof lenis.stop === "function"
+  ) {
+    lenis.stop();
+  }
+
+  // Убедимся что карточка перевёрнута. Если нет — сначала переворачиваем её (rotateY + сдвиг),
+  // ждём окончания flip анимации, затем продолжаем стандартный expand flow.
+  const innerForFlip = clickedCard.querySelector(".memory-card-inner");
+  if (innerForFlip && !clickedCard.classList.contains("is-flipped")) {
+    // Добавляем класс сразу, чтобы hover/leave не конфликтовали с анимацией
+    clickedCard.classList.add("is-flipped");
+
+    await new Promise((resolve) => {
+      const flipTl = gsap.timeline({ onComplete: resolve });
+      flipTl.to(
+        innerForFlip,
+        { rotateY: 180, duration: 0.6, ease: "power2.inOut", z: 20 },
+        0
+      );
+      // визуальный сдвиг карточки при flip (как в hover)
+      flipTl.to(
+        clickedCard,
+        { xPercent: -90, duration: 0.6, ease: "power2.inOut" },
+        0
+      );
+    });
+  }
+
+  // Небольшая RAF пауза для стабильности layout перед снятием rect
+  await new Promise((r) => requestAnimationFrame(r));
+  await new Promise((r) => setTimeout(r, 8));
+
+  // Теперь снимаем rect уже после (возможно) flip-а — это гарантирует корректные координаты
+  const rect = clickedCard.getBoundingClientRect();
+
+  selectedCard = clickedCard;
+  const controls = document.querySelector(".memory-library-controls");
+
+  // Save original position/size and original z-index
+  clickedCard.dataset.origLeft = rect.left;
+  clickedCard.dataset.origTop = rect.top;
+  clickedCard.dataset.origWidth = rect.width;
+  clickedCard.dataset.origHeight = rect.height;
+  const computedZ =
+    clickedCard.style.zIndex || getComputedStyle(clickedCard).zIndex || "";
+  clickedCard.dataset.origZIndex = computedZ;
+
+  const comp = getComputedStyle(clickedCard);
+
+  const placeholder = document.createElement("div");
+  placeholder.className = "memory-card-placeholder";
+  placeholder.style.flex = "0 0 " + rect.width + "px";
+  placeholder.style.width = rect.width + "px";
+  placeholder.style.minWidth = rect.width + "px";
+  placeholder.style.height = rect.height + "px";
+  placeholder.style.marginTop = comp.marginTop;
+  placeholder.style.marginBottom = comp.marginBottom;
+  placeholder.style.marginLeft = comp.marginLeft;
+  placeholder.style.marginRight = comp.marginRight;
+  placeholder.style.boxSizing = "border-box";
+  placeholder.style.display = "block";
+  placeholder.style.visibility = "hidden";
+  placeholder.style.pointerEvents = "none";
+
+  clickedCard.parentNode.insertBefore(placeholder, clickedCard);
+  clickedCard.__placeholder = placeholder;
+
+  document.body.appendChild(clickedCard);
+
+  if (!document.querySelector(".memory-lightbox")) {
+    const overlay = document.createElement("div");
+    overlay.className = "memory-lightbox";
+    Object.assign(overlay.style, {
+      position: "fixed",
+      inset: "0",
+      background: "rgba(0,0,0,0.6)",
+      zIndex: "10000",
+      opacity: "0",
+      pointerEvents: "auto",
+      backdropFilter: "blur(2px)",
+    });
+    document.body.appendChild(overlay);
+    gsap.to(overlay, { opacity: 1, duration: 0.35, ease: "power2.out" });
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "memory-lightbox-close";
+    closeBtn.setAttribute("aria-label", "Close");
+    closeBtn.innerHTML = "✕";
+    Object.assign(closeBtn.style, {
+      position: "fixed",
+      top: "20px",
+      right: "20px",
+      zIndex: "10006",
+      background: "transparent",
+      color: "#fff",
+      border: "none",
+      fontSize: "28px",
+      cursor: "pointer",
+      padding: "8px",
+      lineHeight: "1",
+      opacity: "0",
+    });
+    document.body.appendChild(closeBtn);
+    gsap.to(closeBtn, { opacity: 1, duration: 0.35, delay: 0.05 });
+
+    closeBtn.addEventListener("click", () => {
+      window.exitSelectedState();
+    });
+  }
+
+  list.classList.add("--selected");
+  clickedCard.classList.add("--selected");
+
+  // Переводим карточку в fixed и подготавливаем к expand анимации
+  clickedCard.style.position = "fixed";
+  clickedCard.style.left = rect.left + "px";
+  clickedCard.style.top = rect.top + "px";
+  clickedCard.style.width = rect.width + "px";
+  clickedCard.style.height = rect.height + "px";
+  clickedCard.style.margin = "0";
+  clickedCard.style.zIndex = "10005";
+  clickedCard.style;
+  const tl = gsap.timeline({
+    onComplete: () => {
+      isAnimating = false;
+      clickedCard.classList.add("is-expanded");
+    },
+  });
+
+  getMemoryCards().forEach((other) => {
+    if (other !== clickedCard) {
+      tl.to(
+        other,
+        {
+          x: window.innerWidth * 1.05,
+          opacity: 0,
+          duration: 0.6,
+          ease: "power2.in",
+        },
+        0
+      );
+    }
+  });
+
+  if (controls) {
+    tl.to(controls, { opacity: 0, filter: "blur(18px)", duration: 0.45 }, 0);
+  }
+
+  const inner = clickedCard.querySelector(".memory-card-inner");
+  if (inner) {
+    gsap.set(inner, {
+      rotateY: inner._gsap ? gsap.getProperty(inner, "rotateY") : 0,
+    });
+  }
+
+  // card-specific front/back pieces for the selected animation
+  const hoverInfo = clickedCard.querySelector(".card-hover-info-wrapper");
+  const backContent = clickedCard.querySelector(".card-back-content-wrap");
+
+  tl.to(
+    clickedCard,
+    {
+      left: "50%",
+      top: "50%",
+      xPercent: -50,
+      yPercent: -50,
+      width: "calc(80vh * 3 / 4)",
+      height: "80vh",
+      duration: 0.85,
+      ease: "power3.out",
+    },
+    0.02
+  );
+
+  const selectedContent = clickedCard.querySelector(
+    ".memory-card-selected-content"
+  );
+  if (selectedContent) {
+    tl.fromTo(
+      selectedContent,
+      { opacity: 0, filter: "blur(18px)" },
+      { opacity: 1, filter: "blur(0px)", duration: 0.6 },
+      0.6
+    );
+  }
+
+  // Animate hover -> back content when entering selected state
+  if (backContent) {
+    // ensure back starts hidden
+    gsap.set(backContent, { autoAlpha: 0, filter: "blur(12px)" });
+    tl.to(
+      backContent,
+      { autoAlpha: 1, filter: "blur(0px)", duration: 0.5, ease: "power2.out" },
+      0.3
+    );
+  }
+  if (hoverInfo) {
+    tl.to(
+      hoverInfo,
+      { autoAlpha: 0, filter: "blur(12px)", duration: 0.35, ease: "power2.in" },
+      0
+    );
+  }
+};
+
+// ========== FLIP ANIMATION WITH FADE SEQUENCE ==========
+// Use delegated click handler on the wrapper so newly rendered cards also work
+(function setupCardClickDelegation() {
+  const container =
+    document.querySelector(".memory-cards-list-wrapper") || document;
+
+  container.addEventListener("click", (e) => {
+    const card = e.target.closest(".memory-card");
+    if (!card) return;
+
+    // If card is selected, do nothing (close only via close button)
+    if (selectedCard === card) return;
+
+    // Prevent interactions while animations are running
+    if (isAnimating) return;
+
+    // If already flipped, click enters selected state — only if flip finished
+    if (isFlipped && !selectedCard && !isAnimating) {
+      window.enterSelectedState(card);
+      return;
+    }
+
+    const startFlipFlow = () => {
+      if (!library || !library.classList.contains("active")) {
+        openCardAfterFlip = card;
+      } else {
+        openCardAfterFlip = null;
+      }
+
+      isFlipped = !isFlipped;
+      isAnimating = true;
+
+      const titleWrapper = document.querySelector(".section-title-wrapper");
+      const aboutSection = document.querySelector(".about-section");
+      const controls = document.querySelector(".memory-library-controls");
+
+      const fadeOutTl = gsap.timeline();
+      if (titleWrapper) {
+        fadeOutTl.to(
+          titleWrapper,
+          {
+            opacity: 0,
+            filter: "blur(18px)",
+            duration: 0.6,
+            ease: "power2.inOut",
+          },
+          0
+        );
+      }
+      if (aboutSection) {
+        fadeOutTl.to(
+          aboutSection,
+          {
+            opacity: 0,
+            filter: "blur(18px)",
+            duration: 0.6,
+            ease: "power2.inOut",
+          },
+          0
+        );
+      }
+
+      fadeOutTl.add(() => {
+        let state = Flip.getState(
+          ".memory-library-section, .memory-library-bg, .memory-card, .memory-cards-list-wrapper"
+        );
+
+        library.classList.toggle("active");
+        background.classList.toggle("active");
+        list.classList.toggle("active");
+        getMemoryCards().forEach((c) => c.classList.toggle("active"));
+
+        setTimeout(() => {
+          if (lenis && typeof lenis.scrollTo === "function") {
+            lenis.scrollTo(0, { duration: 1.5, easing: (t) => t * (2 - t) });
+          }
+        }, 100);
+
+        Flip.from(state, {
+          scale: true,
+          duration: 2,
+          rotate: 0,
+          ease: "cubic",
+          onComplete: () => {
+            const fadeInTl = gsap.timeline();
+            if (titleWrapper)
+              fadeInTl.to(
+                titleWrapper,
+                {
+                  opacity: 1,
+                  filter: "blur(0px)",
+                  duration: 0.6,
+                  ease: "power2.out",
+                },
+                0
+              );
+            if (aboutSection)
+              fadeInTl.to(
+                aboutSection,
+                {
+                  opacity: 1,
+                  filter: "blur(0px)",
+                  duration: 0.6,
+                  ease: "power2.out",
+                },
+                0
+              );
+            if (controls)
+              fadeInTl.to(
+                controls,
+                { opacity: 1, duration: 0.6, ease: "power2.out" },
+                0
+              );
+
+            fadeInTl.add(() => {
+              if (typeof scroller !== "undefined" && scroller.update)
+                scroller.update();
+              if (typeof window.recalcLibraryDraggable === "function")
+                window.recalcLibraryDraggable();
+
+              if (openCardAfterFlip) {
+                const cardToOpen = openCardAfterFlip;
+                openCardAfterFlip = null;
+                setTimeout(() => {
+                  if (!isAnimating && !selectedCard)
+                    window.enterSelectedState(cardToOpen);
+                }, 120);
+              }
+
+              isAnimating = false;
+            });
+          },
+        });
+
+        document.body.classList.toggle("alt-mode");
       });
+    };
+
+    const isCompact = !(library && library.classList.contains("active"));
+    if (isCompact) {
+      isAnimating = true;
+      gsap.to(card, {
+        y: 0,
+        duration: 0.18,
+        ease: "power2.in",
+        onComplete: () => {
+          setTimeout(() => {
+            startFlipFlow();
+          }, 20);
+        },
+      });
+      return;
+    }
+
+    startFlipFlow();
+  });
+})();
+
+// ========== CARD HOVER ANIMATION ==========
+/*
+  Старую реализацию (индивидуальные слушатели на каждую карточку)
+  заменяем на делегированную на контейнер, чтобы hover работал
+  даже после того, как карточки вынимались/перемещались в DOM.
+*/
+(function setupCardHoverDelegation() {
+  const container =
+    document.querySelector(".memory-cards-list-wrapper") || document;
+  // helper: всегда работать с актуальным списком карточек
+  const getCards = () => Array.from(document.querySelectorAll(".memory-card"));
+
+  function applyGrayscaleToOthers(card) {
+    getCards().forEach((c) => {
+      if (c !== card) c.classList.add("grayscale");
+    });
+  }
+  function removeGrayscaleFromOthers() {
+    getCards().forEach((c) => c.classList.remove("grayscale"));
+  }
+
+  // Вспомогательные анимации — повторяют прежнее поведение
+  function onCardPointerEnter(card) {
+    if (isAnimating || selectedCard) return;
+
+    applyGrayscaleToOthers(card);
+
+    const inner = card.querySelector(".memory-card-inner");
+    const isActive =
+      library && (library.classList.contains("active") || isFlipped);
+    if (isActive) {
+      if (inner) {
+        gsap.to(inner, {
+          rotateY: 180,
+          duration: 0.6,
+          ease: "power2.inOut",
+          z: 20,
+        });
+      }
       gsap.to(card, {
         xPercent: -90,
         y: 0,
@@ -1019,140 +1794,535 @@ cards.forEach((card) => {
     } else {
       gsap.to(card, { y: -10, duration: 0.3, ease: "power2.out" });
     }
-  });
+  }
 
-  card.addEventListener("mouseleave", () => {
-    if (isAnimating) return;
+  function onCardPointerLeave(card) {
+    if (isAnimating || selectedCard) return;
 
-    cards.forEach((otherCard) => {
-      otherCard.classList.remove("grayscale");
-    });
+    removeGrayscaleFromOthers();
 
-    const isActive = library.classList.contains("active") || isFlipped;
-
+    const inner = card.querySelector(".memory-card-inner");
+    const isActive =
+      library && (library.classList.contains("active") || isFlipped);
     if (isActive) {
-      gsap.to(inner, { rotateY: 0, duration: 0.6, ease: "power2.inOut", z: 0 });
+      if (inner) {
+        gsap.to(inner, {
+          rotateY: 0,
+          duration: 0.6,
+          ease: "power2.inOut",
+          z: 0,
+        });
+      }
       gsap.to(card, { xPercent: 0, y: 0, duration: 0.6, ease: "power2.inOut" });
       card.classList.remove("is-flipped");
     } else {
       gsap.to(card, { y: 0, duration: 0.3, ease: "power2.inOut" });
     }
-  });
-});
+  }
 
-//-----Draggable library
+  // Используем mouseover/mouseout с проверкой relatedTarget, чтобы игнорировать события внутри карточки
+  container.addEventListener("mouseover", (e) => {
+    const card = e.target.closest(".memory-card");
+    if (!card) return;
+    // если пришли с внутреннего элемента той же карточки — игнорируем
+    const from = e.relatedTarget;
+    if (from && card.contains(from)) return;
+    onCardPointerEnter(card);
+  });
+
+  container.addEventListener("mouseout", (e) => {
+    const card = e.target.closest(".memory-card");
+    if (!card) return;
+    // если идём дальше внутрь той же карточки — игнорируем
+    const to = e.relatedTarget;
+    if (to && card.contains(to)) return;
+    onCardPointerLeave(card);
+  });
+})();
+
+// ========== DRAGGABLE & SEARCH SETUP ==========
 document.addEventListener("DOMContentLoaded", () => {
-  const wrapper = document.querySelector(".memory-cards-list-wrapper");
-  const handle = document.querySelector(".memory-slider-handle");
-  const track = document.querySelector(".memory-slider-track");
+  wrapper = document.querySelector(".memory-cards-list-wrapper");
+  handle = document.querySelector(".memory-slider-handle");
+  track = document.querySelector(".memory-slider-track");
   const searchInput = document.querySelector(".custom-search-input");
   const suggestions = document.querySelector(".search-suggestions");
-  const cards = document.querySelectorAll(".memory-card");
 
-  const wrapperWidth = wrapper.scrollWidth;
-  const viewportWidth = wrapper.clientWidth;
-  const maxScroll = wrapperWidth - viewportWidth;
-  const handleMax = track.clientWidth - handle.clientWidth;
+  // Initial calculation
+  const wrapperWidth = wrapper ? wrapper.scrollWidth : 0;
+  const viewportWidth = wrapper ? wrapper.clientWidth : 0;
+  maxScroll = Math.max(0, wrapperWidth - viewportWidth);
+  handleMax = track
+    ? Math.max(0, track.clientWidth - (handle ? handle.clientWidth : 0))
+    : 0;
 
-  const wrapperDraggable = Draggable.create(wrapper, {
-    type: "x",
-    bounds: { minX: -maxScroll, maxX: 0 },
-    inertia: true,
-    onDrag() {
-      const progress = -this.x / maxScroll;
-      gsap.to(handle, {
-        x: progress * handleMax,
-        duration: 0.25,
-        ease: "power2.out",
-      });
-    },
-    onThrowUpdate() {
-      const progress = -this.x / maxScroll;
-      gsap.to(handle, {
-        x: progress * handleMax,
-        duration: 0.25,
-        ease: "power2.out",
-      });
-    },
-  })[0];
+  // Draggable for wrapper
+  if (wrapper) {
+    wrapperDraggable = Draggable.create(wrapper, {
+      type: "x",
+      bounds: { minX: -maxScroll, maxX: 0 },
+      inertia: true,
+      onDrag() {
+        const progress = maxScroll === 0 ? 0 : -this.x / maxScroll;
+        gsap.to(handle, {
+          x: progress * handleMax,
+          duration: 0.25,
+          ease: "power2.out",
+        });
+      },
+      onThrowUpdate() {
+        const progress = maxScroll === 0 ? 0 : -this.x / maxScroll;
+        gsap.to(handle, {
+          x: progress * handleMax,
+          duration: 0.25,
+          ease: "power2.out",
+        });
+      },
+    })[0];
+  }
 
-  const handleDraggable = Draggable.create(handle, {
-    type: "x",
-    bounds: { minX: 0, maxX: handleMax },
-    onDrag() {
-      const progress = this.x / handleMax;
-      gsap.to(wrapper, {
-        x: -progress * maxScroll,
-        duration: 0.35,
-        ease: "power2.out",
-      });
-      wrapperDraggable.update();
-    },
-  })[0];
+  // Draggable for handle
+  if (handle) {
+    handleDraggable = Draggable.create(handle, {
+      type: "x",
+      bounds: { minX: 0, maxX: handleMax },
+      onDrag() {
+        const progress = handleMax === 0 ? 0 : this.x / handleMax;
+        gsap.to(wrapper, {
+          x: -progress * maxScroll,
+          duration: 0.35,
+          ease: "power2.out",
+        });
+        if (wrapperDraggable && typeof wrapperDraggable.update === "function") {
+          wrapperDraggable.update();
+        }
+      },
+    })[0];
+  }
 
   gsap.set(wrapper, { display: "flex", gap: "1rem" });
 
-  // Подсказки поиска
-  if (searchInput && suggestions && cards.length) {
+  // Resize listener
+  window.addEventListener(
+    "resize",
+    () => {
+      if (typeof window.recalcLibraryDraggable === "function")
+        window.recalcLibraryDraggable();
+    },
+    { passive: true }
+  );
+
+  // Initial recalc
+  if (typeof window.recalcLibraryDraggable === "function")
+    window.recalcLibraryDraggable();
+
+  // Search functionality — attach listener even if cards are not yet present; use dynamic lookup on each input
+  if (searchInput && suggestions) {
     searchInput.addEventListener("input", (e) => {
       const value = e.target.value.trim().toLowerCase();
+      const cardsNow = getMemoryCards();
 
-      // Очистить/спрятать подсказки, если меньше 3 символов
+      const resultsText = suggestions.querySelector(".search-results-text");
+
       if (value.length < 3) {
         suggestions.innerHTML = "";
         suggestions.style.display = "none";
-        cards.forEach((card) => (card.style.display = ""));
+        cardsNow.forEach((card) => (card.style.display = ""));
+        if (resultsText) resultsText.textContent = "";
         return;
       }
 
-      // Собираем подходящие карточки
       const found = [];
-      cards.forEach((card) => {
-        const header = card.querySelector(".memory-card-header");
-        const text = card.querySelector(".memory-card-text");
-        const headerText = header ? header.textContent.toLowerCase() : "";
-        const bodyText = text ? text.textContent.toLowerCase() : "";
+      cardsNow.forEach((card) => {
+        const headerEls = Array.from(
+          card.querySelectorAll(".memory-card-header")
+        );
+        const textEls = Array.from(card.querySelectorAll(".memory-card-text"));
+        const headerText = headerEls
+          .map((h) => h.textContent || "")
+          .join(" ")
+          .toLowerCase();
+        const bodyText = textEls
+          .map((t) => t.textContent || "")
+          .join(" ")
+          .toLowerCase();
+        // display values: prefer the first header/text element to avoid duplicates in suggestions
+        const headerDisplay =
+          headerEls[0] && headerEls[0].textContent
+            ? headerEls[0].textContent.trim()
+            : "";
+        const textDisplay =
+          textEls[0] && textEls[0].textContent
+            ? textEls[0].textContent.trim()
+            : "";
         if (headerText.includes(value) || bodyText.includes(value)) {
-          found.push({ card, headerText });
+          found.push({ card, headerText, headerDisplay, textDisplay });
         }
       });
 
-      // Показать список найденных
       suggestions.innerHTML = "";
+
+      const info = document.createElement("div");
+      info.className = "search-info";
+      const infoText = document.createElement("div");
+      infoText.className = "search-results-text";
+      infoText.textContent =
+        found.length > 0
+          ? `${found.length} record${found.length === 1 ? "" : "s"} found`
+          : "No records found";
+      info.appendChild(infoText);
+      suggestions.appendChild(info);
+
       if (found.length > 0) {
-        found.forEach(({ card, headerText }) => {
+        found.forEach(({ card, headerText, headerDisplay, textDisplay }) => {
           const option = document.createElement("div");
           option.className = "search-suggestion-item";
-          option.textContent = headerText || "Без названия";
+          const hdr = headerDisplay || headerText || "Unknown Title";
+          const txt = textDisplay ? ` by ${textDisplay}` : "";
+          option.textContent = hdr + txt;
+
           option.addEventListener("click", () => {
-            // Исправлено: вместо scrollIntoView меняем позицию draggable
             const cardRect = card.getBoundingClientRect();
             const wrapperRect = wrapper.getBoundingClientRect();
-            const offset = cardRect.left - wrapperRect.left;
+            const cardCenter = cardRect.left + cardRect.width / 2;
+            const wrapperCenter = wrapperRect.left + wrapperRect.width / 2;
+            const offsetCenter = cardCenter - wrapperCenter;
 
-            let newX = -offset;
+            let newX = -offsetCenter;
             if (newX > 0) newX = 0;
             if (newX < -maxScroll) newX = -maxScroll;
 
-            wrapperDraggable.x = newX;
-            gsap.set(wrapper, { x: newX });
+            // Устанавливаем draggable позицию и плавно анимируем wrapper
+            if (wrapperDraggable) wrapperDraggable.x = newX;
 
-            const handleX = (-newX / maxScroll) * handleMax;
-            gsap.to(handle, { x: handleX, duration: 0.25, ease: "power2.out" });
+            gsap.to(wrapper, {
+              x: newX,
+              duration: 0.35,
+              ease: "power2.out",
+              onComplete: () => {
+                // Подвинуть handle синхронно
+                const handleX =
+                  maxScroll === 0 ? 0 : (-newX / maxScroll) * handleMax;
+                if (handle)
+                  gsap.to(handle, {
+                    x: handleX,
+                    duration: 0.25,
+                    ease: "power2.out",
+                  });
 
-            wrapperDraggable.update();
+                if (
+                  wrapperDraggable &&
+                  typeof wrapperDraggable.update === "function"
+                ) {
+                  wrapperDraggable.update();
+                }
 
-            card.classList.add("highlight");
-            setTimeout(() => card.classList.remove("highlight"), 1200);
+                // Обеспечим состояние "active" для библиотеки, чтобы можно было открыть карточку
+                if (!card.classList.contains("active")) {
+                  if (library) library.classList.add("active");
+                  if (background) background.classList.add("active");
+                  if (list) list.classList.add("active");
+                  // добавим всем карточкам класс active (как при flip)
+                  getMemoryCards().forEach((c) => c.classList.add("active"));
+                  isFlipped = true;
+                }
+
+                // Небольшая пауза, затем открываем выбранную карточку в selected state
+                setTimeout(() => {
+                  if (!isAnimating && !selectedCard) {
+                    window.enterSelectedState(card);
+                  }
+                }, 140);
+              },
+            });
+
             suggestions.innerHTML = "";
             suggestions.style.display = "none";
           });
+
           suggestions.appendChild(option);
         });
         suggestions.style.display = "block";
       } else {
-        suggestions.style.display = "none";
+        suggestions.style.display = "block";
       }
     });
   }
+});
+
+// ------- Добавить эту функцию рядом с другими функциями memory library -------
+function collapseLibraryToCompact() {
+  return new Promise((resolve) => {
+    // если уже анимируем или нет активной библиотеки — ничего не делаем
+    if (typeof isAnimating !== "undefined" && isAnimating) {
+      console.debug("collapseLibraryToCompact: already animating");
+      return resolve(false);
+    }
+    if (!library || !library.classList.contains("active")) {
+      console.debug("collapseLibraryToCompact: library not active");
+      return resolve(false);
+    }
+
+    isAnimating = true;
+
+    const titleWrapper = document.querySelector(".section-title-wrapper");
+    const aboutSection = document.querySelector(".about-section");
+    const controls = document.querySelector(".memory-library-controls");
+
+    // снимем состояние перед изменением DOM/классов
+    const state = Flip.getState(
+      ".memory-library-section, .memory-library-bg, .memory-card, .memory-cards-list-wrapper"
+    );
+
+    // отключаем active классы — это противоположность перехода в active
+    library.classList.remove("active");
+    background.classList.remove("active");
+    list.classList.remove("active");
+    getMemoryCards().forEach((c) => c.classList.remove("active"));
+
+    // логическое состояние flipped должно отражать компактный вид
+    isFlipped = false;
+
+    // плавный scroll-to-top (как в открытии)
+    setTimeout(() => {
+      if (lenis && typeof lenis.scrollTo === "function") {
+        lenis.scrollTo(0, {
+          duration: 1.0,
+          easing: (t) => t * (2 - t),
+        });
+      }
+    }, 80);
+
+    // Сам Flip анимационный переход
+    Flip.from(state, {
+      scale: true,
+      duration: 1.2,
+      rotate: 0,
+      ease: "cubic",
+      onComplete: () => {
+        // восстановим видимые секции (title/about), а controls — наоборот СКРОЕМ
+        const tl = gsap.timeline();
+
+        if (titleWrapper) {
+          tl.to(
+            titleWrapper,
+            {
+              opacity: 1,
+              filter: "blur(0px)",
+              duration: 0.45,
+              ease: "power2.out",
+            },
+            0
+          );
+        }
+        if (aboutSection) {
+          tl.to(
+            aboutSection,
+            {
+              opacity: 1,
+              filter: "blur(0px)",
+              duration: 0.45,
+              ease: "power2.out",
+            },
+            0
+          );
+        }
+
+        // Скрываем контролы: плавно уменьшаем opacity и добавляем blur,
+        // по окончании — отключаем pointer events
+        if (controls) {
+          tl.to(
+            controls,
+            {
+              opacity: 0,
+              filter: "blur(12px)",
+              duration: 0.45,
+              ease: "power2.out",
+            },
+            0
+          );
+        }
+
+        tl.add(() => {
+          if (typeof window.recalcLibraryDraggable === "function") {
+            window.recalcLibraryDraggable();
+          }
+          // завершили анимацию
+          isAnimating = false;
+          console.debug("collapseLibraryToCompact: animation complete");
+          resolve(true);
+        });
+      },
+      onInterrupt: () => {
+        // в случае прерывания — убираем флаг и резолвим false
+        isAnimating = false;
+        console.debug("collapseLibraryToCompact: interrupted");
+        resolve(false);
+      },
+    });
+
+    // поддерживать совместимость с alt-mode toggle, как при открытии/flip
+    document.body.classList.toggle("alt-mode");
+  });
+}
+// --------------------------------------------------------------------------
+``;
+
+// HOWLER PLAYER IN CARD
+function initHowlerJSAudioPlayer() {
+  const howlerElements = document.querySelectorAll("[data-howler]");
+  // ensure global registry
+  window.howlerSoundInstances = window.howlerSoundInstances || {};
+
+  howlerElements.forEach((element, index) => {
+    // prefer existing id to keep stable mapping, otherwise assign
+    const uniqueId = element.id || `howler-${Date.now()}-${index}`;
+    element.id = uniqueId;
+    element.setAttribute("data-howler-status", "not-playing");
+
+    const audioSrc = element.getAttribute("data-howler-src");
+    // if an existing Howl instance for this id exists but src changed, unload it first
+    if (window.howlerSoundInstances[uniqueId]) {
+      try {
+        const prev = window.howlerSoundInstances[uniqueId];
+        if (prev && typeof prev.unload === "function") prev.unload();
+      } catch (e) {
+        console.warn("Failed to unload previous howler instance", e);
+      }
+      delete window.howlerSoundInstances[uniqueId];
+    }
+
+    // create new Howl for this element
+    const durationElement = element.querySelector(
+      '[data-howler-info="duration"]'
+    );
+    const progressTextElement = element.querySelector(
+      '[data-howler-info="progress"]'
+    );
+    const timelineContainer = element.querySelector(
+      '[data-howler-control="timeline"]'
+    );
+    const timelineBar = element.querySelector(
+      '[data-howler-control="progress"]'
+    );
+    const toggleButton = element.querySelector(
+      '[data-howler-control="toggle-play"]'
+    );
+
+    const sound = new Howl({
+      src: [audioSrc],
+      html5: true,
+      onload: () => {
+        if (durationElement)
+          durationElement.textContent = formatTime(sound.duration());
+        const audioNode = sound._sounds?.[0]?._node;
+        if (audioNode) {
+          audioNode.addEventListener("pause", () => {
+            if (sound.playing()) {
+              sound.pause();
+            }
+          });
+          audioNode.addEventListener("play", () => {
+            if (!sound.playing()) {
+              sound.play();
+            }
+          });
+        }
+      },
+      onplay: () => {
+        pauseAllExcept(uniqueId);
+        element.setAttribute("data-howler-status", "playing");
+        requestAnimationFrame(updateProgress);
+      },
+      onpause: () => element.setAttribute("data-howler-status", "not-playing"),
+      onstop: () => element.setAttribute("data-howler-status", "not-playing"),
+      onend: resetUI,
+    });
+
+    // store in global registry
+    window.howlerSoundInstances[uniqueId] = sound;
+
+    function updateProgress() {
+      if (!sound.playing()) return;
+      updateUI();
+      requestAnimationFrame(updateProgress);
+    }
+
+    function updateUI() {
+      const currentTime = sound.seek() || 0;
+      const duration = sound.duration() || 1;
+      if (progressTextElement)
+        progressTextElement.textContent = formatTime(currentTime);
+      if (timelineBar)
+        timelineBar.style.width = `${(currentTime / duration) * 100}%`;
+      timelineContainer?.setAttribute(
+        "aria-valuenow",
+        Math.round((currentTime / duration) * 100)
+      );
+    }
+
+    function resetUI() {
+      if (timelineBar) timelineBar.style.width = "100%";
+      element.setAttribute("data-howler-status", "not-playing");
+    }
+
+    function seekToPosition(event) {
+      const rect = timelineContainer.getBoundingClientRect();
+      const percentage = (event.clientX - rect.left) / rect.width;
+      sound.seek(sound.duration() * percentage);
+      if (!sound.playing()) {
+        pauseAllExcept(uniqueId);
+        sound.play();
+        element.setAttribute("data-howler-status", "playing");
+      }
+      updateUI();
+    }
+
+    function togglePlay() {
+      const isPlaying = sound.playing();
+      sound.playing()
+        ? sound.pause()
+        : (pauseAllExcept(uniqueId), sound.play());
+      toggleButton?.setAttribute("aria-pressed", !isPlaying);
+    }
+
+    function pauseAllExcept(id) {
+      Object.keys(window.howlerSoundInstances || {}).forEach((otherId) => {
+        const other = window.howlerSoundInstances[otherId];
+        try {
+          if (
+            otherId !== id &&
+            other &&
+            typeof other.playing === "function" &&
+            other.playing()
+          ) {
+            other.pause();
+            document
+              .getElementById(otherId)
+              ?.setAttribute("data-howler-status", "not-playing");
+          }
+        } catch (e) {
+          console.warn("pauseAllExcept error for", otherId, e);
+        }
+      });
+    }
+
+    function formatTime(seconds) {
+      const minutes = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${minutes}:${secs.toString().padStart(2, "0")}`;
+    }
+
+    toggleButton?.addEventListener("click", togglePlay);
+    timelineContainer?.addEventListener("click", seekToPosition);
+    sound.on("seek", updateUI);
+    sound.on("play", updateUI);
+  });
+
+  return window.howlerSoundInstances;
+}
+
+// Initialize Audio Player (HowlerJS)
+document.addEventListener("DOMContentLoaded", function () {
+  initHowlerJSAudioPlayer();
 });
