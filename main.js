@@ -740,6 +740,33 @@ document.addEventListener("DOMContentLoaded", function () {
   window.addEventListener("load", () => ScrollTrigger.refresh());
 });
 
+//Dynamic nav
+const nav = document.querySelector(".navbar");
+if (nav) {
+  const showAnim = gsap
+    .from(nav, {
+      yPercent: -100,
+      paused: true,
+      duration: 0.2,
+    })
+    .progress(1);
+
+  ScrollTrigger.create({
+    scroller: ".main-content",
+    start: "top top",
+    end: 99999,
+    onUpdate: (self) => {
+      if (self.direction === -1) {
+        if (self.scroll() > nav.offsetHeight) {
+          showAnim.play();
+        }
+      } else {
+        showAnim.reverse();
+      }
+    },
+  });
+}
+
 //--Main:Nav: Time
 
 // РќР°СЃС‚СЂРѕР№РєРё
@@ -1345,7 +1372,13 @@ window.exitSelectedState = function exitSelectedState() {
   if (controls) {
     tl.to(
       controls,
-      { opacity: 1, filter: "blur(0px)", duration: 0.36, ease: "power2.out" },
+      {
+        opacity: 1,
+        filter: "blur(0px)",
+        duration: 0.36,
+        ease: "power2.out",
+        pointerEvents: "auto",
+      },
       "<0.02"
     );
   }
@@ -1527,7 +1560,16 @@ window.enterSelectedState = async function enterSelectedState(clickedCard) {
   });
 
   if (controls) {
-    tl.to(controls, { opacity: 0, filter: "blur(18px)", duration: 0.45 }, 0);
+    tl.to(
+      controls,
+      {
+        opacity: 0,
+        filter: "blur(18px)",
+        duration: 0.45,
+        pointerEvents: "none",
+      },
+      0
+    );
   }
 
   const inner = clickedCard.querySelector(".memory-card-inner");
@@ -1697,7 +1739,12 @@ window.enterSelectedState = async function enterSelectedState(clickedCard) {
             if (controls)
               fadeInTl.to(
                 controls,
-                { opacity: 1, duration: 0.6, ease: "power2.out" },
+                {
+                  opacity: 1,
+                  duration: 0.6,
+                  ease: "power2.out",
+                  pointerEvents: "auto",
+                },
                 0
               );
 
@@ -1848,6 +1895,32 @@ document.addEventListener("DOMContentLoaded", () => {
   const searchInput = document.querySelector(".custom-search-input");
   const suggestions = document.querySelector(".search-suggestions");
 
+  // Определяем язык по URL
+  const lang = window.location.pathname.startsWith("/es") ? "es" : "en";
+
+  // Тексты
+  const messages = {
+    en: {
+      one: "1 record found",
+      many: (n) => `${n} records found`,
+      none: "No records found",
+    },
+    es: {
+      one: "1 registro encontrado",
+      many: (n) => `${n} registros encontrados`,
+      none: "No se encontraron registros",
+    },
+  };
+
+  // Disable Enter on search
+  if (searchInput) {
+    searchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+      }
+    });
+  }
+
   // Initial calculation
   const wrapperWidth = wrapper ? wrapper.scrollWidth : 0;
   const viewportWidth = wrapper ? wrapper.clientWidth : 0;
@@ -1916,7 +1989,7 @@ document.addEventListener("DOMContentLoaded", () => {
   if (typeof window.recalcLibraryDraggable === "function")
     window.recalcLibraryDraggable();
 
-  // Search functionality — attach listener even if cards are not yet present; use dynamic lookup on each input
+  // Search functionality
   if (searchInput && suggestions) {
     searchInput.addEventListener("input", (e) => {
       const value = e.target.value.trim().toLowerCase();
@@ -1946,7 +2019,7 @@ document.addEventListener("DOMContentLoaded", () => {
           .map((t) => t.textContent || "")
           .join(" ")
           .toLowerCase();
-        // display values: prefer the first header/text element to avoid duplicates in suggestions
+
         const headerDisplay =
           headerEls[0] && headerEls[0].textContent
             ? headerEls[0].textContent.trim()
@@ -1955,6 +2028,7 @@ document.addEventListener("DOMContentLoaded", () => {
           textEls[0] && textEls[0].textContent
             ? textEls[0].textContent.trim()
             : "";
+
         if (headerText.includes(value) || bodyText.includes(value)) {
           found.push({ card, headerText, headerDisplay, textDisplay });
         }
@@ -1962,16 +2036,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
       suggestions.innerHTML = "";
 
+      // ---------- UPDATED TEXT OUTPUT ----------
       const info = document.createElement("div");
       info.className = "search-info";
       const infoText = document.createElement("div");
       infoText.className = "search-results-text";
-      infoText.textContent =
-        found.length > 0
-          ? `${found.length} record${found.length === 1 ? "" : "s"} found`
-          : "No records found";
+
+      let text;
+      if (found.length === 0) {
+        text = messages[lang].none;
+      } else if (found.length === 1) {
+        text = messages[lang].one;
+      } else {
+        text = messages[lang].many(found.length);
+      }
+
+      infoText.textContent = text;
       info.appendChild(infoText);
       suggestions.appendChild(info);
+      // ------------------------------------------
 
       if (found.length > 0) {
         found.forEach(({ card, headerText, headerDisplay, textDisplay }) => {
@@ -1992,7 +2075,6 @@ document.addEventListener("DOMContentLoaded", () => {
             if (newX > 0) newX = 0;
             if (newX < -maxScroll) newX = -maxScroll;
 
-            // Устанавливаем draggable позицию и плавно анимируем wrapper
             if (wrapperDraggable) wrapperDraggable.x = newX;
 
             gsap.to(wrapper, {
@@ -2000,7 +2082,6 @@ document.addEventListener("DOMContentLoaded", () => {
               duration: 0.35,
               ease: "power2.out",
               onComplete: () => {
-                // Подвинуть handle синхронно
                 const handleX =
                   maxScroll === 0 ? 0 : (-newX / maxScroll) * handleMax;
                 if (handle)
@@ -2017,17 +2098,14 @@ document.addEventListener("DOMContentLoaded", () => {
                   wrapperDraggable.update();
                 }
 
-                // Обеспечим состояние "active" для библиотеки, чтобы можно было открыть карточку
                 if (!card.classList.contains("active")) {
                   if (library) library.classList.add("active");
                   if (background) background.classList.add("active");
                   if (list) list.classList.add("active");
-                  // добавим всем карточкам класс active (как при flip)
                   getMemoryCards().forEach((c) => c.classList.add("active"));
                   isFlipped = true;
                 }
 
-                // Небольшая пауза, затем открываем выбранную карточку в selected state
                 setTimeout(() => {
                   if (!isAnimating && !selectedCard) {
                     window.enterSelectedState(card);
@@ -2138,6 +2216,7 @@ function collapseLibraryToCompact() {
               filter: "blur(12px)",
               duration: 0.45,
               ease: "power2.out",
+              pointerEvents: "none",
             },
             0
           );
@@ -2165,34 +2244,29 @@ function collapseLibraryToCompact() {
     document.body.classList.toggle("alt-mode");
   });
 }
-// --------------------------------------------------------------------------
 ``;
 
-// HOWLER PLAYER IN CARD
+// ==========================HOWLER PLAYER IN CARD=======================
 function initHowlerJSAudioPlayer() {
   const howlerElements = document.querySelectorAll("[data-howler]");
-  // ensure global registry
   window.howlerSoundInstances = window.howlerSoundInstances || {};
 
   howlerElements.forEach((element, index) => {
-    // prefer existing id to keep stable mapping, otherwise assign
     const uniqueId = element.id || `howler-${Date.now()}-${index}`;
     element.id = uniqueId;
     element.setAttribute("data-howler-status", "not-playing");
 
     const audioSrc = element.getAttribute("data-howler-src");
-    // if an existing Howl instance for this id exists but src changed, unload it first
+
+    // Чистим старый инстанс
     if (window.howlerSoundInstances[uniqueId]) {
       try {
-        const prev = window.howlerSoundInstances[uniqueId];
-        if (prev && typeof prev.unload === "function") prev.unload();
-      } catch (e) {
-        console.warn("Failed to unload previous howler instance", e);
-      }
+        window.howlerSoundInstances[uniqueId].unload();
+      } catch (e) {}
       delete window.howlerSoundInstances[uniqueId];
     }
 
-    // create new Howl for this element
+    // UI
     const durationElement = element.querySelector(
       '[data-howler-info="duration"]'
     );
@@ -2209,38 +2283,50 @@ function initHowlerJSAudioPlayer() {
       '[data-howler-control="toggle-play"]'
     );
 
+    const icon = element.querySelector(".howler-player-icon");
+
     const sound = new Howl({
       src: [audioSrc],
       html5: true,
+      preload: false,
+
       onload: () => {
         if (durationElement)
           durationElement.textContent = formatTime(sound.duration());
+
+        toggleButton?.classList.remove("howler-loading");
+        icon?.classList.remove("howler-icon-hidden");
+
         const audioNode = sound._sounds?.[0]?._node;
         if (audioNode) {
           audioNode.addEventListener("pause", () => {
-            if (sound.playing()) {
-              sound.pause();
-            }
+            if (sound.playing()) sound.pause();
           });
           audioNode.addEventListener("play", () => {
-            if (!sound.playing()) {
-              sound.play();
-            }
+            if (!sound.playing()) sound.play();
           });
         }
       },
+
       onplay: () => {
+        toggleButton?.classList.remove("howler-loading");
+        icon?.classList.remove("howler-icon-hidden");
+
         pauseAllExcept(uniqueId);
         element.setAttribute("data-howler-status", "playing");
         requestAnimationFrame(updateProgress);
       },
+
       onpause: () => element.setAttribute("data-howler-status", "not-playing"),
       onstop: () => element.setAttribute("data-howler-status", "not-playing"),
       onend: resetUI,
     });
 
-    // store in global registry
     window.howlerSoundInstances[uniqueId] = sound;
+
+    // -----------------------------
+    // FUNCTIONS
+    // -----------------------------
 
     function updateProgress() {
       if (!sound.playing()) return;
@@ -2251,10 +2337,13 @@ function initHowlerJSAudioPlayer() {
     function updateUI() {
       const currentTime = sound.seek() || 0;
       const duration = sound.duration() || 1;
+
       if (progressTextElement)
         progressTextElement.textContent = formatTime(currentTime);
+
       if (timelineBar)
         timelineBar.style.width = `${(currentTime / duration) * 100}%`;
+
       timelineContainer?.setAttribute(
         "aria-valuenow",
         Math.round((currentTime / duration) * 100)
@@ -2270,39 +2359,42 @@ function initHowlerJSAudioPlayer() {
       const rect = timelineContainer.getBoundingClientRect();
       const percentage = (event.clientX - rect.left) / rect.width;
       sound.seek(sound.duration() * percentage);
+
       if (!sound.playing()) {
         pauseAllExcept(uniqueId);
         sound.play();
         element.setAttribute("data-howler-status", "playing");
       }
+
       updateUI();
     }
 
     function togglePlay() {
       const isPlaying = sound.playing();
-      sound.playing()
-        ? sound.pause()
-        : (pauseAllExcept(uniqueId), sound.play());
+
+      // Если звук не загружен — включаем спиннер и прячем иконку
+      if (!isPlaying && sound.state() !== "loaded") {
+        toggleButton?.classList.add("howler-loading");
+        icon?.classList.add("howler-icon-hidden");
+        sound.load();
+      }
+
+      isPlaying ? sound.pause() : (pauseAllExcept(uniqueId), sound.play());
       toggleButton?.setAttribute("aria-pressed", !isPlaying);
     }
 
     function pauseAllExcept(id) {
-      Object.keys(window.howlerSoundInstances || {}).forEach((otherId) => {
+      Object.keys(window.howlerSoundInstances).forEach((otherId) => {
         const other = window.howlerSoundInstances[otherId];
         try {
-          if (
-            otherId !== id &&
-            other &&
-            typeof other.playing === "function" &&
-            other.playing()
-          ) {
+          if (otherId !== id && other.playing()) {
             other.pause();
             document
               .getElementById(otherId)
               ?.setAttribute("data-howler-status", "not-playing");
           }
         } catch (e) {
-          console.warn("pauseAllExcept error for", otherId, e);
+          console.warn("pauseAllExcept error:", otherId, e);
         }
       });
     }
@@ -2313,6 +2405,9 @@ function initHowlerJSAudioPlayer() {
       return `${minutes}:${secs.toString().padStart(2, "0")}`;
     }
 
+    // -----------------------------
+    // EVENT LISTENERS
+    // -----------------------------
     toggleButton?.addEventListener("click", togglePlay);
     timelineContainer?.addEventListener("click", seekToPosition);
     sound.on("seek", updateUI);
@@ -2322,7 +2417,5 @@ function initHowlerJSAudioPlayer() {
   return window.howlerSoundInstances;
 }
 
-// Initialize Audio Player (HowlerJS)
-document.addEventListener("DOMContentLoaded", function () {
-  initHowlerJSAudioPlayer();
-});
+// Initialize Audio Player
+document.addEventListener("DOMContentLoaded", initHowlerJSAudioPlayer);
