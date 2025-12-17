@@ -1,1 +1,10 @@
 .DS_Store
+search.html
+401.html
+node_modules/
+dist/
+.env
+.env.local
+.vite/
+*.local
+

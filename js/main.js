@@ -148,16 +148,16 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function finishIntroTransition() {
-    // если GSAP доступен — сначала анимируем скрытие intro, затем показываем main и widget
+    // If GSAP is available, animate intro fade-out first, then show main content and navbar
     if (typeof gsap !== "undefined") {
       const tl = gsap.timeline({ defaults: { ease: "power2.inOut" } });
 
-      // элемент фонового канваса (может иметь id или класс)
+      // Background canvas element (identified by class or id)
       const bgEl =
         document.querySelector(".intro-bg-image") ||
         document.getElementById("pixi-canvas-container");
 
-      // гарантируем начальное видимое состояние перед анимацией
+      // Ensure intro starts visible and unblurred before animation
       gsap.set(introSection, { autoAlpha: 1, filter: "blur(0px)" });
       if (bgEl) gsap.set(bgEl, { autoAlpha: 1, filter: "blur(0px)" });
       // Ensure main content and nav start hidden and blurred so they animate in together
@@ -166,19 +166,19 @@ document.addEventListener("DOMContentLoaded", () => {
         filter: "blur(18px)",
       });
 
-      // отключаем взаимодействие с intro во время анимации (на старте анимации)
-      // и плавно фейдим + блюрим intro; по завершении — скрываем и активируем main
+      // Disable interaction with intro during animation (at animation start)
+      // then smoothly fade and blur intro; on completion hide it and activate main
       tl.to(
         introSection,
         {
-          autoAlpha: 0, // анимирует opacity и visibility
+          autoAlpha: 0, // animates opacity and visibility
           filter: "blur(18px)",
           duration: 0.9,
           onStart: () => {
             introSection.style.pointerEvents = "none";
           },
           onComplete: () => {
-            // выполняем скрытие/переключение только после завершения анимации
+            // Execute hide/switch only after animation completes
             disableScroll(introSection);
             hideLayer(introSection);
             showLayer(mainContent);
@@ -192,7 +192,7 @@ document.addEventListener("DOMContentLoaded", () => {
         0
       );
 
-      // Параллельная и точно такая же анимация для фонового изображения/канваса
+      // Parallel and identical animation for background image/canvas
       if (bgEl) {
         tl.to(
           bgEl,
@@ -204,11 +204,11 @@ document.addEventListener("DOMContentLoaded", () => {
               bgEl.style.pointerEvents = "none";
             },
           },
-          0 // запуск в параллель с анимацией introSection
+          0 /* start in parallel with intro animation */
         );
       }
 
-      // затем анимируем появление виджета (main-content элемент)
+      // Then animate the appearance of the main content widget
       tl.to(
         [".main-content", ".bold-nav-full"],
         {
@@ -222,7 +222,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ">"
       );
     } else {
-      // fallback — без анимации
+      // Fallback - no animation
       const bgEl =
         document.querySelector(".intro-bg-image") ||
         document.getElementById("pixi-canvas-container");
@@ -436,22 +436,22 @@ $(function () {
 //------------
 //=======bg animation (PIXI.js)===========
 (async () => {
-  // Инициализация PIXI
+  // Initialize PIXI application
   const app = new PIXI.Application();
 
   await app.init({ resizeTo: window });
 
-  // Получаем контейнер
+  // Get container element where canvas will be rendered
   const containerElement = document.getElementById("pixi-canvas-container");
 
-  // Добавляем canvas в контейнер и растягиваем его на всю ширину и высоту
+  // Style canvas to fill its container completely
   app.view.style.width = "100%";
   app.view.style.height = "100%";
   app.view.style.display = "block";
 
   containerElement.appendChild(app.view);
 
-  // Загружаем изображения
+  // Load all background images from CDN
   const bgImages = [
     "bg-img-1.webp",
     "bg-img-2.webp",
@@ -472,32 +472,32 @@ $(function () {
   const container = new PIXI.Container();
   app.stage.addChild(container);
 
-  // Текущий и следующий спрайты для плавного переключения
+  // Current and next background sprites for smooth transitions
   let currentBg = PIXI.Sprite.from(bgImages[0]);
   currentBg.alpha = 1;
   container.addChild(currentBg);
 
-  // Resize function для спрайтов фона
+  // Fit background sprite to cover entire screen without distortion
   function resizeFlagSprite(sprite) {
-    // масштабируем спрайт так, чтобы он покрывал экран без искажения (cover)
+    // Scale sprite to cover screen without distortion
     const sw = app.screen.width;
     const sh = app.screen.height;
     const iw = sprite.texture.width || 1;
     const ih = sprite.texture.height || 1;
     const scale = Math.max(sw / iw, sh / ih);
     sprite.scale.set(scale, scale);
-    // центрируем и позиционируем так, чтобы покрывать экран
+    // Center the sprite to maintain proper coverage
     sprite.position.set((sw - iw * scale) / 2, (sh - ih * scale) / 2);
   }
   resizeFlagSprite(currentBg);
 
-  // При ресайзе окна меняем размер фонового спрайта
+  // Handle window resize events
   window.addEventListener("resize", () => {
     resizeFlagSprite(currentBg);
     if (nextBg) resizeFlagSprite(nextBg);
   });
 
-  // Дисплейсмент-карта
+  // Create displacement map for visual effects
   const displacementSprite = PIXI.Sprite.from(
     "https://cdn.jsdelivr.net/gh/bogdankolomiyets/memory-remix@main/assets/images/dmaps/2048x2048/fibers.jpg"
   );
@@ -512,7 +512,7 @@ $(function () {
   });
   currentBg.filters = [displacementFilter];
 
-  // Анимация displacement
+  // Animate displacement map scrolling continuously
   let speed = 0.3;
   app.ticker.add(() => {
     displacementSprite.x += speed;
@@ -769,7 +769,7 @@ if (nav) {
 
 //--Main:Nav: Time
 
-// РќР°СЃС‚СЂРѕР№РєРё
+// Configuration options
 const selector = ".clock";
 const use24h = false; // true = 24-h format
 const showSeconds = false; // show seconds
@@ -886,7 +886,7 @@ document.addEventListener("DOMContentLoaded", function () {
     return;
   }
 
-  // Сохраняем шаблон карточки перед удалением
+  // Save the template card before removing it
   const templateCard = wrapper.querySelector(".memory-card");
 
   if (!templateCard) {
@@ -894,20 +894,20 @@ document.addEventListener("DOMContentLoaded", function () {
     return;
   }
 
-  // Клонируем шаблон для последующего использования
+  // Clone template for later use
   const cardTemplate = templateCard.cloneNode(true);
 
-  // Функция рендера
+  // Render function for creating cards from data
   function renderCards(memories) {
-    // Удаляем ВСЕ существующие карточки
+    // Remove all existing cards first
     const allCards = wrapper.querySelectorAll(".memory-card");
     allCards.forEach((card) => card.remove());
 
-    // Создаём новые карточки для каждого memory
+    // Create new cards for each memory
     memories.forEach((memory) => {
       const card = cardTemplate.cloneNode(true);
 
-      // Заполняем данные
+      // Populate card with memory data
       const headerEls = Array.from(
         card.querySelectorAll(".memory-card-header")
       );
@@ -927,19 +927,19 @@ document.addEventListener("DOMContentLoaded", function () {
           playerEl.setAttribute("data-howler", "");
       }
 
-      // Убираем display:none если есть
+      // Remove display:none if present
       card.style.display = "";
 
-      // Добавляем карточку в DOM
+      // Add card to DOM
       wrapper.appendChild(card);
     });
 
-    // После создания всех карточек назначаем обложки
+    // Assign covers after all cards are created
     if (typeof assignCoversToCards === "function") {
       assignCoversToCards().catch(console.error);
     }
 
-    // Инициализируем Howler-плееры для вновь созданных карточек
+    // Initialize Howler audio players for newly created cards
     if (typeof initHowlerJSAudioPlayer === "function") {
       try {
         initHowlerJSAudioPlayer();
@@ -949,7 +949,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  // Фетч и сортировка
+  // Fetch and sort memories from API
   function loadMemories() {
     fetch(API_URL, { cache: "no-store" })
       .then((response) => {
@@ -957,10 +957,10 @@ document.addEventListener("DOMContentLoaded", function () {
         return response.json();
       })
       .then((data) => {
-        // Фильтр по approved
+        // Filter for approved records only
         const approved = data.filter((item) => item.approved);
 
-        // Сортировка по updated_at (от новых к старым)
+        // Sort by updated_at (newest first)
         approved.sort(
           (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
         );
@@ -972,7 +972,7 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   }
 
-  // Вызываем на каждой загрузке страницы
+  // Load memories on page load
   loadMemories();
 });
 
@@ -984,7 +984,7 @@ const GH_BRANCH = "main";
 const GH_DIR = "assets/covers";
 const STORAGE_KEY = "memoryCoversV1";
 
-// FisherвЂ“Yates shuffle
+// Fisher-Yates shuffle algorithm for randomizing array order
 function shuffle(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -1091,6 +1091,15 @@ const library = document.querySelector(".memory-library-section");
 const background = document.querySelector(".memory-library-bg");
 const list = document.querySelector(".memory-cards-list-wrapper");
 
+// Global draggable variables
+let wrapper = null;
+let handle = null;
+let track = null;
+let wrapperDraggable = null;
+let handleDraggable = null;
+let maxScroll = 0;
+let handleMax = 0;
+
 // helper: always work with the up-to-date set of memory cards
 function getMemoryCards() {
   return Array.from(document.querySelectorAll(".memory-card"));
@@ -1189,7 +1198,7 @@ window.exitSelectedState = function exitSelectedState() {
   );
   const controls = document.querySelector(".memory-library-controls");
 
-  // 0) Сначала анимированно скрываем и удаляем lightbox и кнопку закрыть (параллельно)
+  // Animate fade-out and remove lightbox and close button in parallel
   if (overlay) {
     gsap.to(overlay, {
       opacity: 0,
@@ -1216,24 +1225,24 @@ window.exitSelectedState = function exitSelectedState() {
   }
 
   // Timeline:
-  // 1) скрыть выбранный контент + вернуть rotateY,
-  // 2) анимировать карточку обратно к плейсхолдеру,
-  // 3) СБРОСИТЬ inline-стили/классы/data и вернуть карточку в поток DOM (выполняется ПЕРЕД появлением других карточек),
-  // 4) показать контролы и остальные карточки,
-  // 5) финал (recalc, включение draggable/lenis)
+  // 1) Hide selected content and reset card rotation
+  // 2) Animate card back to original position
+  // 3) Reset inline styles and return card to DOM flow
+  // 4) Show controls and restore other cards
+  // 5) Final cleanup (draggable re-enable, bounds recalc)
   const tl = gsap.timeline({
     onComplete: () => {
-      // 1) Очистим inline-filter у всех карточек (на всякий случай)
+      // Clear inline filter from all cards
       document.querySelectorAll(".memory-card").forEach((c) => {
         c.style.filter = "";
       });
 
-      // 2) Уберём класс grayscale у всех карточек — возвращаем все в цветное состояние
+      // Remove grayscale effect from all cards
       document.querySelectorAll(".memory-card.grayscale").forEach((c) => {
         c.classList.remove("grayscale");
       });
 
-      // Финал — включаем draggable/lenis, снимаем флаг анимации и пересчитываем bounds
+      // Final: re-enable draggable/lenis and recalculate layout
       if (wrapperDraggable && typeof wrapperDraggable.enable === "function") {
         wrapperDraggable.enable();
       }
@@ -1254,7 +1263,7 @@ window.exitSelectedState = function exitSelectedState() {
     },
   });
 
-  // 1) скрываем контент и возвращаем rotateY
+  // 1) Hide selected content and return card rotation
   // reverse card-specific front/back animation: backContent -> hide, hoverInfo -> show
   const hoverInfo = clickedCard.querySelector(".card-hover-info-wrapper");
   const backContent = clickedCard.querySelector(".card-back-content-wrap");
@@ -1283,7 +1292,7 @@ window.exitSelectedState = function exitSelectedState() {
     tl.to(innerEl, { rotateY: 0, duration: 0.28, ease: "power2.inOut" }, 0);
   }
 
-  // 2) перемещаем карточку обратно в её координаты (анимация обратна enterSelectedState)
+  // 2) Animate card back to original position
   tl.to(
     clickedCard,
     {
@@ -1299,9 +1308,9 @@ window.exitSelectedState = function exitSelectedState() {
     ">0"
   );
 
-  // 3) После завершения движения — СБРОСИТЬ всё для выбранной карточки и вернуть её в поток DOM
+  // 3) After animation: reset all styles and return card to document flow
   tl.add(() => {
-    // Вставляем карточку обратно перед плейсхолдером (если есть), иначе пытаемся вернуть в список
+    // Reinsert card before placeholder or back into list
     try {
       if (placeholder && placeholder.parentNode) {
         placeholder.parentNode.insertBefore(clickedCard, placeholder);
@@ -1322,13 +1331,13 @@ window.exitSelectedState = function exitSelectedState() {
       );
     }
 
-    // Удаляем плейсхолдер, если он есть
+    // Remove placeholder
     if (placeholder) {
       placeholder.remove();
       delete clickedCard.__placeholder;
     }
 
-    // Сброс inline-стилей выбранной карточки (чтобы вернулась к стилям из CSS)
+    // Reset all inline styles
     clickedCard.style.position = "";
     clickedCard.style.left = "";
     clickedCard.style.top = "";
@@ -1347,11 +1356,11 @@ window.exitSelectedState = function exitSelectedState() {
       innerEl.style.transform = "";
     }
 
-    // Убираем классы, связанные с состоянием selected/expanded/flipped
+    // Remove state-related classes
     clickedCard.classList.remove("--selected", "is-expanded", "is-flipped");
     list.classList.remove("--selected");
 
-    // Удаляем сохранённые data-атрибуты
+    // Remove saved data attributes
     clickedCard.removeAttribute("data-orig-left");
     clickedCard.removeAttribute("data-orig-top");
     clickedCard.removeAttribute("data-orig-width");
@@ -1359,8 +1368,8 @@ window.exitSelectedState = function exitSelectedState() {
     if (clickedCard.dataset.origZIndex)
       clickedCard.removeAttribute("data-orig-z-index");
 
-    // Новый: очистим inline `filter`, который мог оставить GSAP — чтобы .grayscale из CSS снова работал
-    // очищаем у всех карточек (включая только что возвращённую)
+    // Clear inline filter to let CSS grayscale work again
+    // Clear inline filter from all cards
     document.querySelectorAll(".memory-card").forEach((c) => {
       c.style.filter = "";
     });
@@ -1793,15 +1802,12 @@ window.enterSelectedState = async function enterSelectedState(clickedCard) {
 })();
 
 // ========== CARD HOVER ANIMATION ==========
-/*
-  Старую реализацию (индивидуальные слушатели на каждую карточку)
-  заменяем на делегированную на контейнер, чтобы hover работал
-  даже после того, как карточки вынимались/перемещались в DOM.
-*/
+// Replace individual card hover listeners with delegated container approach
+// This ensures hover works even after cards are moved or re-rendered
 (function setupCardHoverDelegation() {
   const container =
     document.querySelector(".memory-cards-list-wrapper") || document;
-  // helper: всегда работать с актуальным списком карточек
+  // Helper to always work with the current set of memory cards
   const getCards = () => Array.from(document.querySelectorAll(".memory-card"));
 
   function applyGrayscaleToOthers(card) {
@@ -1813,7 +1819,7 @@ window.enterSelectedState = async function enterSelectedState(clickedCard) {
     getCards().forEach((c) => c.classList.remove("grayscale"));
   }
 
-  // Вспомогательные анимации — повторяют прежнее поведение
+  // Helper animations - replicate the previous hover behavior
   function onCardPointerEnter(card) {
     if (isAnimating || selectedCard) return;
 
@@ -1867,11 +1873,11 @@ window.enterSelectedState = async function enterSelectedState(clickedCard) {
     }
   }
 
-  // Используем mouseover/mouseout с проверкой relatedTarget, чтобы игнорировать события внутри карточки
+  // Use mouseover/mouseout with relatedTarget check to ignore internal card events
   container.addEventListener("mouseover", (e) => {
     const card = e.target.closest(".memory-card");
     if (!card) return;
-    // если пришли с внутреннего элемента той же карточки — игнорируем
+    // Ignore if coming from card's internal element
     const from = e.relatedTarget;
     if (from && card.contains(from)) return;
     onCardPointerEnter(card);
@@ -1880,7 +1886,7 @@ window.enterSelectedState = async function enterSelectedState(clickedCard) {
   container.addEventListener("mouseout", (e) => {
     const card = e.target.closest(".memory-card");
     if (!card) return;
-    // если идём дальше внутрь той же карточки — игнорируем
+    // Ignore if going to card's internal element
     const to = e.relatedTarget;
     if (to && card.contains(to)) return;
     onCardPointerLeave(card);
