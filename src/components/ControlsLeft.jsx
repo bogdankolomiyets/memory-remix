@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAudioEngine } from '../hooks/useAudioEngine';
 
 const ControlsLeft = () => {
-   const { isPlaying, togglePlay, isRecording, startRecording, stopRecording, setVolume, setPitch } = useAudioEngine();
+   const { isPlaying, togglePlay, isRecording, startRecording, stopRecording, setVolume, setPitch, isLooping, toggleLoop } = useAudioEngine();
 
    const [vol, setVolState] = useState(0.8);
    const [pitch, setPitchState] = useState(1);
@@ -102,7 +102,14 @@ const ControlsLeft = () => {
 
          {/* 4. Loop Toggle */}
          <div className="control-group bottom-group">
-            <button className="circle-btn loop-btn">
+            <button
+               className={`circle-btn loop-btn ${isLooping ? 'active' : ''}`}
+               onClick={toggleLoop}
+               style={{
+                  backgroundColor: isLooping ? 'var(--color-highlight)' : 'transparent',
+                  color: isLooping ? 'white' : 'var(--color-accent)'
+               }}
+            >
                LOOP
             </button>
          </div>

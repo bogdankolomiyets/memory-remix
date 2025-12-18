@@ -7,6 +7,7 @@ export function useAudioEngine() {
    const [currentBeat, setCurrentBeat] = useState(0);
    const [isRecording, setIsRecording] = useState(audioEngine.isRecording);
    const [isMetronomeOn, setIsMetronomeOn] = useState(audioEngine.isMetronomeOn);
+   const [isLooping, setIsLooping] = useState(audioEngine.isLooping);
 
    useEffect(() => {
       // Subscribe to engine events
@@ -16,6 +17,7 @@ export function useAudioEngine() {
          if (event === 'beat') setCurrentBeat(data);
          if (event === 'isRecording') setIsRecording(data);
          if (event === 'metronome') setIsMetronomeOn(data);
+         if (event === 'isLooping') setIsLooping(data);
          if (event === 'recordingComplete') {
             console.log("Hook: Recording ready");
          }
@@ -53,6 +55,10 @@ export function useAudioEngine() {
       audioEngine.toggleMetronome();
    }, [init]);
 
+   const toggleLoop = useCallback(() => {
+      audioEngine.toggleLooping();
+   }, []);
+
    const setVolume = useCallback((val) => {
       audioEngine.setMasterVolume(val);
    }, []);
@@ -83,11 +89,13 @@ export function useAudioEngine() {
       currentBeat,
       isRecording,
       isMetronomeOn,
+      isLooping,
       togglePlay,
       setBpm: changeBpm,
       startRecording,
       stopRecording,
       toggleMetronome,
+      toggleLoop,
       setVolume,
       setPitch,
       triggerKick,

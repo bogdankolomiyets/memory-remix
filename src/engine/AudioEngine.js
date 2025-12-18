@@ -44,6 +44,7 @@ class AudioEngine {
       this.isMetronomeOn = false;
       this.isRecording = false;
       this.bpm = 120;
+      this.currentPitch = 1.0;
 
       // Scheduler State
       this.currentBeat = 0;
@@ -59,7 +60,10 @@ class AudioEngine {
       this.recordedSequence = []; // [{type: 'kick', time: 1.2}, ...]
       this.recordingStartTime = 0;
       this.sequenceDelay = 0.085; // Default delay: 85ms
+      this.isLooping = false;
       this.playbackSource = null;
+      this.playbackTimeouts = [];
+      this.loopIntervalID = null;
       // Sample State
       this.sampleBuffers = {
          kick: null,
@@ -119,6 +123,13 @@ class AudioEngine {
       console.log(`Drum Playback Offset set to: ${ms}ms`);
    }
 
+   toggleLooping() {
+      this.isLooping = !this.isLooping;
+      this.emit('isLooping', this.isLooping);
+      // If we are currently playing, we might need to restart to apply loop immediately
+      // but simpler to just let it apply at the next cycle
+   }
+
    // --- Sequencer Integration ---
    recordEvent(type) {
       if (!this.isRecording) return;
@@ -151,6 +162,7 @@ class AudioEngine {
       if (this.sampleBuffers.kick) {
          const source = this.ctx.createBufferSource();
          source.buffer = this.sampleBuffers.kick;
+         source.playbackRate.value = this.currentPitch;
          source.connect(this.masterGain);
          source.start();
          return;
@@ -160,7 +172,7 @@ class AudioEngine {
       const osc = this.ctx.createOscillator();
       const gain = this.ctx.createGain();
 
-      osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+      osc.frequency.setValueAtTime(150 * this.currentPitch, this.ctx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
 
       gain.gain.setValueAtTime(1, this.ctx.currentTime);
@@ -180,13 +192,14 @@ class AudioEngine {
       if (this.sampleBuffers.snare) {
          const source = this.ctx.createBufferSource();
          source.buffer = this.sampleBuffers.snare;
+         source.playbackRate.value = this.currentPitch;
          source.connect(this.masterGain);
          source.start();
          return;
       }
 
       // Fallback: Noise component
-      const bufferSize = this.ctx.sampleRate * 0.1; // 100ms
+      const bufferSize = this.ctx.sampleRate * (0.1 / this.currentPitch); // Adjust duration
       const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
       const data = buffer.getChannelData(0);
       for (let i = 0; i < bufferSize; i++) {
@@ -198,11 +211,11 @@ class AudioEngine {
 
       const noiseFilter = this.ctx.createBiquadFilter();
       noiseFilter.type = 'highpass';
-      noiseFilter.frequency.value = 1000;
+      noiseFilter.frequency.value = 1000 * this.currentPitch;
 
       const noiseEnv = this.ctx.createGain();
       noiseEnv.gain.setValueAtTime(1, this.ctx.currentTime);
-      noiseEnv.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+      noiseEnv.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + (0.1 / this.currentPitch));
 
       noise.connect(noiseFilter);
       noiseFilter.connect(noiseEnv);
@@ -212,9 +225,9 @@ class AudioEngine {
       const osc = this.ctx.createOscillator();
       const oscGain = this.ctx.createGain();
       osc.type = 'triangle';
-      osc.frequency.setValueAtTime(250, this.ctx.currentTime);
+      osc.frequency.setValueAtTime(250 * this.currentPitch, this.ctx.currentTime);
       oscGain.gain.setValueAtTime(0.5, this.ctx.currentTime);
-      oscGain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+      oscGain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + (0.05 / this.currentPitch));
 
       osc.connect(oscGain);
       oscGain.connect(this.masterGain);
@@ -231,13 +244,14 @@ class AudioEngine {
       if (this.sampleBuffers.hihat) {
          const source = this.ctx.createBufferSource();
          source.buffer = this.sampleBuffers.hihat;
+         source.playbackRate.value = this.currentPitch;
          source.connect(this.masterGain);
          source.start();
          return;
       }
 
       // Fallback: Synthesis
-      const bufferSize = this.ctx.sampleRate * 0.05; // 50ms
+      const bufferSize = this.ctx.sampleRate * (0.05 / this.currentPitch); // 50ms
       const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
       const data = buffer.getChannelData(0);
       for (let i = 0; i < bufferSize; i++) {
@@ -249,11 +263,11 @@ class AudioEngine {
 
       const filter = this.ctx.createBiquadFilter();
       filter.type = 'highpass';
-      filter.frequency.value = 7000;
+      filter.frequency.value = 7000 * this.currentPitch;
 
       const gain = this.ctx.createGain();
       gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+      gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + (0.05 / this.currentPitch));
 
       noise.connect(filter);
       filter.connect(gain);
@@ -358,7 +372,6 @@ class AudioEngine {
 
    // --- Playback ( The "PLAY" Button ) ---
    playRecording() {
-      // Plays the LAST recorded buffer + the recorded sequence
       if (!this.recordedBuffer) {
          console.warn("No recording to play");
          return;
@@ -369,31 +382,45 @@ class AudioEngine {
          return;
       }
 
-      // 1. Play Voice
-      this.playbackSource = this.ctx.createBufferSource();
-      this.playbackSource.buffer = this.recordedBuffer;
-      this.playbackSource.playbackRate.value = this.currentPitch || 1.0;
+      const playSequence = () => {
+         // Clear any previous drum timeouts
+         this.playbackTimeouts.forEach(t => clearTimeout(t));
+         this.playbackTimeouts = [];
 
-      this.playbackSource.connect(this.masterOut);
-
-      this.playbackSource.onended = () => {
-         // Only stop if we haven't manually stopped
-         if (this.isPlaying) this.stopPlayback();
+         // Schedule current sequence
+         this.recordedSequence.forEach(event => {
+            const timeout = setTimeout(() => {
+               if (event.type === 'kick') this.triggerKick();
+               else if (event.type === 'snare') this.triggerSnare();
+               else if (event.type === 'hihat') this.triggerHiHat();
+            }, (event.time / this.currentPitch + this.sequenceDelay) * 1000);
+            this.playbackTimeouts.push(timeout);
+         });
       };
 
-      this.playbackSource.start();
+      const startPlayback = () => {
+         // 1. Voice
+         this.playbackSource = this.ctx.createBufferSource();
+         this.playbackSource.buffer = this.recordedBuffer;
+         this.playbackSource.playbackRate.value = this.currentPitch || 1.0;
+         this.playbackSource.connect(this.masterOut);
 
-      // 2. Play Sequenced Drums (with offset)
-      this.playbackTimeouts = [];
-      this.recordedSequence.forEach(event => {
-         const timeout = setTimeout(() => {
-            // Internal trigger handles its own routing to masterGain
-            if (event.type === 'kick') this.triggerKick();
-            else if (event.type === 'snare') this.triggerSnare();
-            else if (event.type === 'hihat') this.triggerHiHat();
-         }, (event.time + this.sequenceDelay) * 1000);
-         this.playbackTimeouts.push(timeout);
-      });
+         // Handle End of playback
+         this.playbackSource.onended = () => {
+            if (this.isLooping && this.isPlaying) {
+               startPlayback(); // Restart voice
+               playSequence(); // Restart drums
+            } else if (this.isPlaying) {
+               this.stopPlayback();
+            }
+         };
+
+         this.playbackSource.start();
+      };
+
+      // Initial start
+      startPlayback();
+      playSequence();
 
       this.isPlaying = true;
       this.emit('play', true);
@@ -408,6 +435,11 @@ class AudioEngine {
       // Clear sequencer timeouts
       this.playbackTimeouts.forEach(t => clearTimeout(t));
       this.playbackTimeouts = [];
+
+      if (this.loopIntervalID) {
+         clearInterval(this.loopIntervalID);
+         this.loopIntervalID = null;
+      }
 
       this.isPlaying = false;
       this.emit('play', false);
