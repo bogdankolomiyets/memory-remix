@@ -7,7 +7,15 @@ export function useAudioEngine() {
    const [currentBeat, setCurrentBeat] = useState(0);
    const [isRecording, setIsRecording] = useState(audioEngine.isRecording);
    const [isMetronomeOn, setIsMetronomeOn] = useState(audioEngine.isMetronomeOn);
-   const [isLooping, setIsLooping] = useState(audioEngine.isLooping);
+   const [recordingUrl, setRecordingUrl] = useState(null);
+
+   // Separate Track States
+   const [userVolume, setUserVolumeState] = useState(0.8);
+   const [recordVolume, setRecordVolumeState] = useState(0.8);
+   const [userPitch, setUserPitchState] = useState(1.0);
+   const [recordPitch, setRecordPitchState] = useState(1.0);
+   const [userLoop, setUserLoopState] = useState(false);
+   const [recordLoop, setRecordLoopState] = useState(false);
 
    useEffect(() => {
       // Subscribe to engine events
@@ -17,10 +25,13 @@ export function useAudioEngine() {
          if (event === 'beat') setCurrentBeat(data);
          if (event === 'isRecording') setIsRecording(data);
          if (event === 'metronome') setIsMetronomeOn(data);
-         if (event === 'isLooping') setIsLooping(data);
          if (event === 'recordingComplete') {
+            setRecordingUrl(data);
             console.log("Hook: Recording ready");
          }
+         // Sync local state with engine events
+         if (event === 'userLoop') setUserLoopState(data);
+         if (event === 'recordLoop') setRecordLoopState(data);
       });
 
       return () => unsubscribe();
@@ -55,16 +66,33 @@ export function useAudioEngine() {
       audioEngine.toggleMetronome();
    }, [init]);
 
-   const toggleLoop = useCallback(() => {
-      audioEngine.toggleLooping();
+   // Track Controls
+   const setUserVolume = useCallback((val) => {
+      setUserVolumeState(val);
+      audioEngine.setUserVolume(val);
    }, []);
 
-   const setVolume = useCallback((val) => {
-      audioEngine.setMasterVolume(val);
+   const setRecordVolume = useCallback((val) => {
+      setRecordVolumeState(val);
+      audioEngine.setRecordVolume(val);
    }, []);
 
-   const setPitch = useCallback((val) => {
-      audioEngine.setPitch(val);
+   const setUserPitch = useCallback((val) => {
+      setUserPitchState(val);
+      audioEngine.setUserPitch(val);
+   }, []);
+
+   const setRecordPitch = useCallback((val) => {
+      setRecordPitchState(val);
+      audioEngine.setRecordPitch(val);
+   }, []);
+
+   const toggleUserLoop = useCallback(() => {
+      audioEngine.toggleUserLoop();
+   }, []);
+
+   const toggleRecordLoop = useCallback(() => {
+      audioEngine.toggleRecordLoop();
    }, []);
 
    const triggerKick = useCallback(() => {
@@ -83,25 +111,39 @@ export function useAudioEngine() {
       audioEngine.setRecordingDelay(ms);
    }, []);
 
+   const loadUserFile = useCallback(async (file) => {
+      return await audioEngine.loadUserFile(file);
+   }, []);
+
    return {
       isPlaying,
       bpm,
       currentBeat,
       isRecording,
       isMetronomeOn,
-      isLooping,
+      recordingUrl,
+
+      // Separate Track State
+      userVolume, recordVolume,
+      userPitch, recordPitch,
+      userLoop, recordLoop,
+
       togglePlay,
       setBpm: changeBpm,
       startRecording,
       stopRecording,
       toggleMetronome,
-      toggleLoop,
-      setVolume,
-      setPitch,
+
+      // Separate Track Setters
+      setUserVolume, setRecordVolume,
+      setUserPitch, setRecordPitch,
+      toggleUserLoop, toggleRecordLoop,
+
       triggerKick,
       triggerSnare,
       triggerHiHat,
       setRecordingDelay,
-      init
+      init,
+      loadUserFile
    };
 }

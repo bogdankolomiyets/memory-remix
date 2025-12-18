@@ -14,9 +14,13 @@ class AudioEngine {
       this.recorderDest = this.ctx.createMediaStreamDestination();
 
       // C. Internal Buses
-      // masterGain: Volume for the "Song" (Drum Pads / Playback)
+      // masterGain: Volume for the "Song" (Drum Pads / Playback of REC)
       this.masterGain = this.ctx.createGain();
       this.masterGain.gain.value = 0.8;
+
+      // userGain: Volume for the Uploaded Track
+      this.userGain = this.ctx.createGain();
+      this.userGain.gain.value = 0.8;
 
       // metronomeGain: Volume for the Click (Goes ONLY to Speakers)
       this.metronomeGain = this.ctx.createGain();
@@ -30,8 +34,10 @@ class AudioEngine {
       // 1. Metronome -> Speakers ONLY
       this.metronomeGain.connect(this.masterOut);
 
-      // 2. Master Mix (Drums/Samples) -> Speakers ONLY
+      // 2. Master Mix (Drums/Rec) -> Speakers
       this.masterGain.connect(this.masterOut);
+      // 3. User Mix (Upload) -> Speakers
+      this.userGain.connect(this.masterOut);
 
       // 3. Mic -> Recorder ONLY (Voice only)
       this.micGain.connect(this.recorderDest);
@@ -44,7 +50,16 @@ class AudioEngine {
       this.isMetronomeOn = false;
       this.isRecording = false;
       this.bpm = 120;
-      this.currentPitch = 1.0;
+      this.bpm = 120;
+
+      // Separate Track State
+      this.userVolume = 0.8;
+      this.userPitch = 1.0;
+      this.userLoop = false;
+
+      this.recordVolume = 0.8;
+      this.recordPitch = 1.0;
+      this.recordLoop = false;
 
       // Scheduler State
       this.currentBeat = 0;
@@ -57,13 +72,16 @@ class AudioEngine {
       this.mediaRecorder = null;
       this.audioChunks = [];
       this.recordedBuffer = null;
+      this.userTrackBuffer = null; // New: For uploaded files
       this.recordedSequence = []; // [{type: 'kick', time: 1.2}, ...]
+      this.recordingStartTime = 0;
       this.recordingStartTime = 0;
       this.sequenceDelay = 0.085; // Default delay: 85ms
       this.isLooping = false;
-      this.playbackSource = null;
+      this.playbackSource = null; // Voice
+      this.userPlaybackSource = null; // Uploaded Track
       this.playbackTimeouts = [];
-      this.loopIntervalID = null;
+      // We no longer use a single loopIntervalID. We rely on onended for each source.
       // Sample State
       this.sampleBuffers = {
          kick: null,
@@ -94,6 +112,20 @@ class AudioEngine {
       }
    }
 
+   // New: Load user file from <input type="file">
+   async loadUserFile(file) {
+      try {
+         const arrayBuffer = await file.arrayBuffer();
+         const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+         this.userTrackBuffer = audioBuffer;
+         console.log(`[AudioEngine] User file loaded. Duration: ${audioBuffer.duration}s`);
+         return true;
+      } catch (err) {
+         console.error("[AudioEngine] Failed to decode user file:", err);
+         return false;
+      }
+   }
+
    subscribe(cb) {
       this.listeners.add(cb);
       return () => this.listeners.delete(cb);
@@ -103,9 +135,48 @@ class AudioEngine {
       this.listeners.forEach(cb => cb(event, data));
    }
 
-   // --- Sliders ---
+   // --- Sliders (Legacy) ---
+   // setMasterVolume(val) { ... } -> repurposed below
+
+   // --- Track Controls ---
+   setUserVolume(val) {
+      this.userVolume = val;
+      this.userGain.gain.setTargetAtTime(val, this.ctx.currentTime, 0.01);
+   }
+
+   setRecordVolume(val) {
+      this.recordVolume = val;
+      this.masterGain.gain.setTargetAtTime(val, this.ctx.currentTime, 0.01);
+   }
+
+   setUserPitch(val) {
+      this.userPitch = val;
+      if (this.userPlaybackSource && this.userPlaybackSource.playbackRate) {
+         this.userPlaybackSource.playbackRate.value = val;
+      }
+   }
+
+   setRecordPitch(val) {
+      this.recordPitch = val;
+      // Voice
+      if (this.playbackSource && this.playbackSource.playbackRate) {
+         this.playbackSource.playbackRate.value = val;
+      }
+   }
+
+   toggleUserLoop() {
+      this.userLoop = !this.userLoop;
+      this.emit('userLoop', this.userLoop);
+   }
+
+   toggleRecordLoop() {
+      this.recordLoop = !this.recordLoop;
+      this.emit('recordLoop', this.recordLoop);
+   }
+
    setMasterVolume(val) {
-      // Clamp 0-1
+      // Legacy support or alias to Record Volume helper if needed, 
+      // but for now let's just use it independently if called.
       this.masterGain.gain.setTargetAtTime(val, this.ctx.currentTime, 0.01);
    }
 
@@ -113,6 +184,10 @@ class AudioEngine {
       // Playback rate for the recorded buffer
       if (this.playbackSource && this.playbackSource.playbackRate) {
          this.playbackSource.playbackRate.value = val;
+      }
+      // Playback rate for the user track
+      if (this.userPlaybackSource && this.userPlaybackSource.playbackRate) {
+         this.userPlaybackSource.playbackRate.value = val;
       }
       this.currentPitch = val; // Store for next playback
    }
@@ -372,8 +447,8 @@ class AudioEngine {
 
    // --- Playback ( The "PLAY" Button ) ---
    playRecording() {
-      if (!this.recordedBuffer) {
-         console.warn("No recording to play");
+      if (!this.recordedBuffer && !this.userTrackBuffer) {
+         console.warn("No recording or user track to play");
          return;
       }
 
@@ -382,45 +457,61 @@ class AudioEngine {
          return;
       }
 
-      const playSequence = () => {
-         // Clear any previous drum timeouts
+      // --- REC TRACK LOGIC (Voice + Drums) ---
+      const playRecordingTrack = () => {
+         // 1. Drums
          this.playbackTimeouts.forEach(t => clearTimeout(t));
          this.playbackTimeouts = [];
 
-         // Schedule current sequence
          this.recordedSequence.forEach(event => {
             const timeout = setTimeout(() => {
-               if (event.type === 'kick') this.triggerKick();
-               else if (event.type === 'snare') this.triggerSnare();
-               else if (event.type === 'hihat') this.triggerHiHat();
-            }, (event.time / this.currentPitch + this.sequenceDelay) * 1000);
+               if (this.isPlaying) {
+                  if (event.type === 'kick') this.triggerKick();
+                  else if (event.type === 'snare') this.triggerSnare();
+                  else if (event.type === 'hihat') this.triggerHiHat();
+               }
+            }, (event.time / this.recordPitch + this.sequenceDelay) * 1000);
             this.playbackTimeouts.push(timeout);
          });
+
+         // 2. Voice
+         if (this.recordedBuffer) {
+            this.playbackSource = this.ctx.createBufferSource();
+            this.playbackSource.buffer = this.recordedBuffer;
+            this.playbackSource.playbackRate.value = this.recordPitch;
+            this.playbackSource.connect(this.masterGain);
+
+            this.playbackSource.onended = () => {
+               if (this.isPlaying && this.recordLoop) {
+                  playRecordingTrack();
+               }
+            };
+
+            this.playbackSource.start();
+         }
       };
 
-      const startPlayback = () => {
-         // 1. Voice
-         this.playbackSource = this.ctx.createBufferSource();
-         this.playbackSource.buffer = this.recordedBuffer;
-         this.playbackSource.playbackRate.value = this.currentPitch || 1.0;
-         this.playbackSource.connect(this.masterOut);
+      // --- USER TRACK LOGIC ---
+      const playUserTrack = () => {
+         if (!this.userTrackBuffer) return;
 
-         // Handle End of playback
-         this.playbackSource.onended = () => {
-            if (this.isLooping && this.isPlaying) {
-               startPlayback(); // Restart voice
-               playSequence(); // Restart drums
-            } else if (this.isPlaying) {
-               this.stopPlayback();
+         this.userPlaybackSource = this.ctx.createBufferSource();
+         this.userPlaybackSource.buffer = this.userTrackBuffer;
+         this.userPlaybackSource.playbackRate.value = this.userPitch;
+         this.userPlaybackSource.connect(this.userGain);
+
+         this.userPlaybackSource.onended = () => {
+            if (this.isPlaying && this.userLoop) {
+               playUserTrack();
             }
          };
 
-         this.playbackSource.start();
+         this.userPlaybackSource.start();
       };
 
-      // Initial start
-      startPlayback();
-      playSequence();
+      // Start Both
+      playRecordingTrack();
+      playUserTrack();
 
       this.isPlaying = true;
       this.emit('play', true);
@@ -429,15 +520,19 @@ class AudioEngine {
    stopPlayback() {
       if (this.playbackSource) {
          this.playbackSource.onended = null;
-         this.playbackSource.stop();
+         try { this.playbackSource.stop(); } catch (e) { }
          this.playbackSource = null;
+      }
+      if (this.userPlaybackSource) {
+         try { this.userPlaybackSource.stop(); } catch (e) { }
+         this.userPlaybackSource = null;
       }
       // Clear sequencer timeouts
       this.playbackTimeouts.forEach(t => clearTimeout(t));
       this.playbackTimeouts = [];
 
       if (this.loopIntervalID) {
-         clearInterval(this.loopIntervalID);
+         clearTimeout(this.loopIntervalID); // Changed from clearInterval to clearTimeout
          this.loopIntervalID = null;
       }
 
