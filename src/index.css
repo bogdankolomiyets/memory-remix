@@ -263,8 +263,10 @@ html {
    font-weight: 500;
 }
 
-.controls-right .circle-btn:hover {
+.controls-right .circle-btn:hover,
+.controls-right .circle-btn.active {
    background: rgba(255, 255, 255, 0.2);
+   border-color: var(--color-highlight) !important;
 }
 
 .metronome-btn {

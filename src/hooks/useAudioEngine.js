@@ -61,6 +61,22 @@ export function useAudioEngine() {
       audioEngine.setPitch(val);
    }, []);
 
+   const triggerKick = useCallback(() => {
+      audioEngine.triggerKick();
+   }, []);
+
+   const triggerSnare = useCallback(() => {
+      audioEngine.triggerSnare();
+   }, []);
+
+   const triggerHiHat = useCallback(() => {
+      audioEngine.triggerHiHat();
+   }, []);
+
+   const setRecordingDelay = useCallback((ms) => {
+      audioEngine.setRecordingDelay(ms);
+   }, []);
+
    return {
       isPlaying,
       bpm,
@@ -74,6 +90,10 @@ export function useAudioEngine() {
       toggleMetronome,
       setVolume,
       setPitch,
+      triggerKick,
+      triggerSnare,
+      triggerHiHat,
+      setRecordingDelay,
       init
    };
 }

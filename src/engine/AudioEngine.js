@@ -30,17 +30,18 @@ class AudioEngine {
       // 1. Metronome -> Speakers ONLY
       this.metronomeGain.connect(this.masterOut);
 
-      // 2. Master Mix (Drums/Playback) -> All Destinations
-      this.masterGain.connect(this.masterOut);      // Hear it
-      this.masterGain.connect(this.recorderDest);   // Record it
+      // 2. Master Mix (Drums/Samples) -> Speakers ONLY
+      this.masterGain.connect(this.masterOut);
 
-      // 3. Mic -> Recorder ONLY (No self-monitoring)
+      // 3. Mic -> Recorder ONLY (Voice only)
+      this.micGain.connect(this.recorderDest);
+
+      // 4. Initial Mic State
       this.micNode = null;
-      // check initMicrophone for connection logic
 
       // State
-      this.isPlaying = false; // "Session" active?
-      this.isMetronomeOn = false; // Is click active?
+      this.isPlaying = false;
+      this.isMetronomeOn = false;
       this.isRecording = false;
       this.bpm = 120;
 
@@ -51,11 +52,20 @@ class AudioEngine {
       this.lookahead = 25.0;
       this.scheduleAheadTime = 0.1;
 
-      // Recording State
+      // Recording & Sequence State
       this.mediaRecorder = null;
       this.audioChunks = [];
-      this.recordedBuffer = null; // The buffer to play back
-      this.playbackSource = null; // Source node for playing back the recording
+      this.recordedBuffer = null;
+      this.recordedSequence = []; // [{type: 'kick', time: 1.2}, ...]
+      this.recordingStartTime = 0;
+      this.sequenceDelay = 0.085; // Default delay: 85ms
+      this.playbackSource = null;
+      // Sample State
+      this.sampleBuffers = {
+         kick: null,
+         snare: null,
+         hihat: null
+      };
 
       this.listeners = new Set();
    }
@@ -64,6 +74,19 @@ class AudioEngine {
    async init() {
       if (this.ctx.state === 'suspended') {
          await this.ctx.resume();
+      }
+   }
+
+   async loadSample(name, url) {
+      if (!url) return;
+      try {
+         const response = await fetch(url);
+         const arrayBuffer = await response.arrayBuffer();
+         const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+         this.sampleBuffers[name] = audioBuffer;
+         console.log(`[AudioEngine] Sample loaded: ${name} from ${url}`);
+      } catch (err) {
+         console.error(`[AudioEngine] Failed to load sample: ${name}`, err);
       }
    }
 
@@ -90,6 +113,19 @@ class AudioEngine {
       this.currentPitch = val; // Store for next playback
    }
 
+   setRecordingDelay(ms) {
+      // Delay for the DRUMS playback relative to voice
+      this.sequenceDelay = ms / 1000.0;
+      console.log(`Drum Playback Offset set to: ${ms}ms`);
+   }
+
+   // --- Sequencer Integration ---
+   recordEvent(type) {
+      if (!this.isRecording) return;
+      const relativeTime = this.ctx.currentTime - this.recordingStartTime;
+      this.recordedSequence.push({ type, time: relativeTime });
+   }
+
    // --- Metronome ---
    toggleMetronome() {
       this.isMetronomeOn = !this.isMetronomeOn;
@@ -105,6 +141,125 @@ class AudioEngine {
    setBpm(bpm) {
       this.bpm = Math.max(40, Math.min(208, bpm));
       this.emit('bpm', this.bpm);
+   }
+
+   // --- Drum Pads (Synthesis) ---
+   triggerKick() {
+      this.recordEvent('kick');
+
+      // If we have a sample, play it
+      if (this.sampleBuffers.kick) {
+         const source = this.ctx.createBufferSource();
+         source.buffer = this.sampleBuffers.kick;
+         source.connect(this.masterGain);
+         source.start();
+         return;
+      }
+
+      // Fallback: Synthesis
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+
+      gain.gain.setValueAtTime(1, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.5);
+   }
+
+   triggerSnare() {
+      this.recordEvent('snare');
+
+      // If we have a sample, play it
+      if (this.sampleBuffers.snare) {
+         const source = this.ctx.createBufferSource();
+         source.buffer = this.sampleBuffers.snare;
+         source.connect(this.masterGain);
+         source.start();
+         return;
+      }
+
+      // Fallback: Noise component
+      const bufferSize = this.ctx.sampleRate * 0.1; // 100ms
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+         data[i] = Math.random() * 2 - 1;
+      }
+
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
+
+      const noiseFilter = this.ctx.createBiquadFilter();
+      noiseFilter.type = 'highpass';
+      noiseFilter.frequency.value = 1000;
+
+      const noiseEnv = this.ctx.createGain();
+      noiseEnv.gain.setValueAtTime(1, this.ctx.currentTime);
+      noiseEnv.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+
+      noise.connect(noiseFilter);
+      noiseFilter.connect(noiseEnv);
+      noiseEnv.connect(this.masterGain);
+
+      // Snap component (sine burst)
+      const osc = this.ctx.createOscillator();
+      const oscGain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(250, this.ctx.currentTime);
+      oscGain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+      oscGain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+
+      osc.connect(oscGain);
+      oscGain.connect(this.masterGain);
+
+      noise.start();
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.2);
+   }
+
+   triggerHiHat() {
+      this.recordEvent('hihat');
+
+      // If we have a sample, play it
+      if (this.sampleBuffers.hihat) {
+         const source = this.ctx.createBufferSource();
+         source.buffer = this.sampleBuffers.hihat;
+         source.connect(this.masterGain);
+         source.start();
+         return;
+      }
+
+      // Fallback: Synthesis
+      const bufferSize = this.ctx.sampleRate * 0.05; // 50ms
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+         data[i] = Math.random() * 2 - 1;
+      }
+
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.value = 7000;
+
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.05);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain);
+
+      noise.start();
    }
 
    // --- Recording ---
@@ -184,6 +339,10 @@ class AudioEngine {
 
       this.mediaRecorder.start();
       this.isRecording = true;
+      this.audioChunks = [];
+      this.recordedSequence = [];
+      this.recordingStartTime = this.ctx.currentTime;
+
       // We also start the scheduler if not running, to keep time
       if (!this.timerID) this.startScheduler();
 
@@ -199,7 +358,7 @@ class AudioEngine {
 
    // --- Playback ( The "PLAY" Button ) ---
    playRecording() {
-      // Plays the LAST recorded buffer
+      // Plays the LAST recorded buffer + the recorded sequence
       if (!this.recordedBuffer) {
          console.warn("No recording to play");
          return;
@@ -210,27 +369,46 @@ class AudioEngine {
          return;
       }
 
+      // 1. Play Voice
       this.playbackSource = this.ctx.createBufferSource();
       this.playbackSource.buffer = this.recordedBuffer;
       this.playbackSource.playbackRate.value = this.currentPitch || 1.0;
 
-      this.playbackSource.connect(this.masterGain);
+      this.playbackSource.connect(this.masterOut);
 
       this.playbackSource.onended = () => {
-         this.isPlaying = false;
-         this.emit('play', false);
+         // Only stop if we haven't manually stopped
+         if (this.isPlaying) this.stopPlayback();
       };
 
       this.playbackSource.start();
+
+      // 2. Play Sequenced Drums (with offset)
+      this.playbackTimeouts = [];
+      this.recordedSequence.forEach(event => {
+         const timeout = setTimeout(() => {
+            // Internal trigger handles its own routing to masterGain
+            if (event.type === 'kick') this.triggerKick();
+            else if (event.type === 'snare') this.triggerSnare();
+            else if (event.type === 'hihat') this.triggerHiHat();
+         }, (event.time + this.sequenceDelay) * 1000);
+         this.playbackTimeouts.push(timeout);
+      });
+
       this.isPlaying = true;
       this.emit('play', true);
    }
 
    stopPlayback() {
       if (this.playbackSource) {
+         this.playbackSource.onended = null;
          this.playbackSource.stop();
          this.playbackSource = null;
       }
+      // Clear sequencer timeouts
+      this.playbackTimeouts.forEach(t => clearTimeout(t));
+      this.playbackTimeouts = [];
+
       this.isPlaying = false;
       this.emit('play', false);
    }
@@ -247,10 +425,6 @@ class AudioEngine {
          this.scheduleNote(this.currentBeat, this.nextNoteTime);
          this.nextNote(); // Advance time
       }
-      // Determine if we need to keep running? 
-      // Yes, we run forever if app is active, 
-      // OR we can pause if both Metronome & Recording & Playback are stopped.
-      // For simplicity in a music app: Keep running.
       this.timerID = window.setTimeout(() => this.schedulerLoop(), this.lookahead);
    }
 
