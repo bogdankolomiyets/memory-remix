@@ -14,9 +14,13 @@ class AudioEngine {
       this.recorderDest = this.ctx.createMediaStreamDestination();
 
       // C. Internal Buses
-      // masterGain: Volume for the "Song" (Drum Pads / Playback)
+      // masterGain: Volume for the "Song" (Drum Pads / Playback of REC)
       this.masterGain = this.ctx.createGain();
       this.masterGain.gain.value = 0.8;
+
+      // userGain: Volume for the Uploaded Track
+      this.userGain = this.ctx.createGain();
+      this.userGain.gain.value = 0.8;
 
       // metronomeGain: Volume for the Click (Goes ONLY to Speakers)
       this.metronomeGain = this.ctx.createGain();
@@ -30,19 +34,34 @@ class AudioEngine {
       // 1. Metronome -> Speakers ONLY
       this.metronomeGain.connect(this.masterOut);
 
-      // 2. Master Mix (Drums/Playback) -> All Destinations
-      this.masterGain.connect(this.masterOut);      // Hear it
-      this.masterGain.connect(this.recorderDest);   // Record it
+      // 2. Master Mix (Drums/Rec) -> Speakers
+      this.masterGain.connect(this.masterOut);
+      // 3. User Mix (Upload) -> Speakers
+      this.userGain.connect(this.masterOut);
 
-      // 3. Mic -> Recorder ONLY (No self-monitoring)
+      // 3. Mic -> Recorder ONLY (Voice only)
+      this.micGain.connect(this.recorderDest);
+
+      // 4. Initial Mic State
       this.micNode = null;
-      // check initMicrophone for connection logic
 
       // State
-      this.isPlaying = false; // "Session" active?
-      this.isMetronomeOn = false; // Is click active?
+      this.isPlaying = false;
+      this.isUserPlaying = false;     // Track 1 playback state
+      this.isRecordPlaying = false;   // Track 2 playback state
+      this.isMetronomeOn = false;
       this.isRecording = false;
       this.bpm = 120;
+
+      // Separate Track State
+      this.userVolume = 0.8;
+      this.userPitch = 1.0;
+      this.userLoop = false;
+
+      this.recordVolume = 0.8;
+      this.recordPitch = 1.0;
+      this.recordLoop = false;
+      this.currentPitch = 1.0;  // IMPORTANT: Initialize for drum synthesis!
 
       // Scheduler State
       this.currentBeat = 0;
@@ -51,11 +70,26 @@ class AudioEngine {
       this.lookahead = 25.0;
       this.scheduleAheadTime = 0.1;
 
-      // Recording State
+      // Recording & Sequence State
       this.mediaRecorder = null;
       this.audioChunks = [];
-      this.recordedBuffer = null; // The buffer to play back
-      this.playbackSource = null; // Source node for playing back the recording
+      this.recordedBuffer = null;
+      this.userTrackBuffer = null; // New: For uploaded files
+      this.recordedSequence = []; // [{type: 'kick', time: 1.2}, ...]
+      this.recordingStartTime = 0;
+      this.recordingStartTime = 0;
+      this.sequenceDelay = 0.085; // Default delay: 85ms
+      this.isLooping = false;
+      this.playbackSource = null; // Voice
+      this.userPlaybackSource = null; // Uploaded Track
+      this.playbackTimeouts = [];
+      // We no longer use a single loopIntervalID. We rely on onended for each source.
+      // Sample State
+      this.sampleBuffers = {
+         kick: null,
+         snare: null,
+         hihat: null
+      };
 
       this.listeners = new Set();
    }
@@ -64,6 +98,34 @@ class AudioEngine {
    async init() {
       if (this.ctx.state === 'suspended') {
          await this.ctx.resume();
+      }
+   }
+
+   async loadSample(name, url) {
+      if (!url) return;
+      try {
+         const response = await fetch(url);
+         const arrayBuffer = await response.arrayBuffer();
+         const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+         this.sampleBuffers[name] = audioBuffer;
+         console.log(`[AudioEngine] Sample loaded: ${name} from ${url}`);
+      } catch (err) {
+         console.error(`[AudioEngine] Failed to load sample: ${name}`, err);
+      }
+   }
+
+   // New: Load user file from <input type="file">
+   async loadUserFile(file) {
+      try {
+         const arrayBuffer = await file.arrayBuffer();
+         const audioBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+         this.userTrackBuffer = audioBuffer;
+         this.emit('userFileLoaded', audioBuffer);
+         console.log(`[AudioEngine] User file loaded. Duration: ${audioBuffer.duration}s`);
+         return true;
+      } catch (err) {
+         console.error("[AudioEngine] Failed to decode user file:", err);
+         return false;
       }
    }
 
@@ -76,9 +138,48 @@ class AudioEngine {
       this.listeners.forEach(cb => cb(event, data));
    }
 
-   // --- Sliders ---
+   // --- Sliders (Legacy) ---
+   // setMasterVolume(val) { ... } -> repurposed below
+
+   // --- Track Controls ---
+   setUserVolume(val) {
+      this.userVolume = val;
+      this.userGain.gain.setTargetAtTime(val, this.ctx.currentTime, 0.01);
+   }
+
+   setRecordVolume(val) {
+      this.recordVolume = val;
+      this.masterGain.gain.setTargetAtTime(val, this.ctx.currentTime, 0.01);
+   }
+
+   setUserPitch(val) {
+      this.userPitch = val;
+      if (this.userPlaybackSource && this.userPlaybackSource.playbackRate) {
+         this.userPlaybackSource.playbackRate.value = val;
+      }
+   }
+
+   setRecordPitch(val) {
+      this.recordPitch = val;
+      // Voice
+      if (this.playbackSource && this.playbackSource.playbackRate) {
+         this.playbackSource.playbackRate.value = val;
+      }
+   }
+
+   toggleUserLoop() {
+      this.userLoop = !this.userLoop;
+      this.emit('userLoop', this.userLoop);
+   }
+
+   toggleRecordLoop() {
+      this.recordLoop = !this.recordLoop;
+      this.emit('recordLoop', this.recordLoop);
+   }
+
    setMasterVolume(val) {
-      // Clamp 0-1
+      // Legacy support or alias to Record Volume helper if needed, 
+      // but for now let's just use it independently if called.
       this.masterGain.gain.setTargetAtTime(val, this.ctx.currentTime, 0.01);
    }
 
@@ -87,7 +188,31 @@ class AudioEngine {
       if (this.playbackSource && this.playbackSource.playbackRate) {
          this.playbackSource.playbackRate.value = val;
       }
+      // Playback rate for the user track
+      if (this.userPlaybackSource && this.userPlaybackSource.playbackRate) {
+         this.userPlaybackSource.playbackRate.value = val;
+      }
       this.currentPitch = val; // Store for next playback
+   }
+
+   setRecordingDelay(ms) {
+      // Delay for the DRUMS playback relative to voice
+      this.sequenceDelay = ms / 1000.0;
+      console.log(`Drum Playback Offset set to: ${ms}ms`);
+   }
+
+   toggleLooping() {
+      this.isLooping = !this.isLooping;
+      this.emit('isLooping', this.isLooping);
+      // If we are currently playing, we might need to restart to apply loop immediately
+      // but simpler to just let it apply at the next cycle
+   }
+
+   // --- Sequencer Integration ---
+   recordEvent(type) {
+      if (!this.isRecording) return;
+      const relativeTime = this.ctx.currentTime - this.recordingStartTime;
+      this.recordedSequence.push({ type, time: relativeTime });
    }
 
    // --- Metronome ---
@@ -105,6 +230,128 @@ class AudioEngine {
    setBpm(bpm) {
       this.bpm = Math.max(40, Math.min(208, bpm));
       this.emit('bpm', this.bpm);
+   }
+
+   // --- Drum Pads (Synthesis) ---
+   triggerKick() {
+      this.recordEvent('kick');
+
+      // If we have a sample, play it
+      if (this.sampleBuffers.kick) {
+         const source = this.ctx.createBufferSource();
+         source.buffer = this.sampleBuffers.kick;
+         source.playbackRate.value = this.currentPitch;
+         source.connect(this.masterGain);
+         source.start();
+         return;
+      }
+
+      // Fallback: Synthesis
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+
+      osc.frequency.setValueAtTime(150 * this.currentPitch, this.ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+
+      gain.gain.setValueAtTime(1, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain);
+
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.5);
+   }
+
+   triggerSnare() {
+      this.recordEvent('snare');
+
+      // If we have a sample, play it
+      if (this.sampleBuffers.snare) {
+         const source = this.ctx.createBufferSource();
+         source.buffer = this.sampleBuffers.snare;
+         source.playbackRate.value = this.currentPitch;
+         source.connect(this.masterGain);
+         source.start();
+         return;
+      }
+
+      // Fallback: Noise component
+      const bufferSize = this.ctx.sampleRate * (0.1 / this.currentPitch); // Adjust duration
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+         data[i] = Math.random() * 2 - 1;
+      }
+
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
+
+      const noiseFilter = this.ctx.createBiquadFilter();
+      noiseFilter.type = 'highpass';
+      noiseFilter.frequency.value = 1000 * this.currentPitch;
+
+      const noiseEnv = this.ctx.createGain();
+      noiseEnv.gain.setValueAtTime(1, this.ctx.currentTime);
+      noiseEnv.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + (0.1 / this.currentPitch));
+
+      noise.connect(noiseFilter);
+      noiseFilter.connect(noiseEnv);
+      noiseEnv.connect(this.masterGain);
+
+      // Snap component (sine burst)
+      const osc = this.ctx.createOscillator();
+      const oscGain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(250 * this.currentPitch, this.ctx.currentTime);
+      oscGain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+      oscGain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + (0.05 / this.currentPitch));
+
+      osc.connect(oscGain);
+      oscGain.connect(this.masterGain);
+
+      noise.start();
+      osc.start();
+      osc.stop(this.ctx.currentTime + 0.2);
+   }
+
+   triggerHiHat() {
+      this.recordEvent('hihat');
+
+      // If we have a sample, play it
+      if (this.sampleBuffers.hihat) {
+         const source = this.ctx.createBufferSource();
+         source.buffer = this.sampleBuffers.hihat;
+         source.playbackRate.value = this.currentPitch;
+         source.connect(this.masterGain);
+         source.start();
+         return;
+      }
+
+      // Fallback: Synthesis
+      const bufferSize = this.ctx.sampleRate * (0.05 / this.currentPitch); // 50ms
+      const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+         data[i] = Math.random() * 2 - 1;
+      }
+
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = buffer;
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'highpass';
+      filter.frequency.value = 7000 * this.currentPitch;
+
+      const gain = this.ctx.createGain();
+      gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + (0.05 / this.currentPitch));
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain);
+
+      noise.start();
    }
 
    // --- Recording ---
@@ -184,6 +431,10 @@ class AudioEngine {
 
       this.mediaRecorder.start();
       this.isRecording = true;
+      this.audioChunks = [];
+      this.recordedSequence = [];
+      this.recordingStartTime = this.ctx.currentTime;
+
       // We also start the scheduler if not running, to keep time
       if (!this.timerID) this.startScheduler();
 
@@ -199,9 +450,8 @@ class AudioEngine {
 
    // --- Playback ( The "PLAY" Button ) ---
    playRecording() {
-      // Plays the LAST recorded buffer
-      if (!this.recordedBuffer) {
-         console.warn("No recording to play");
+      if (!this.recordedBuffer && !this.userTrackBuffer) {
+         console.warn("No recording or user track to play");
          return;
       }
 
@@ -210,29 +460,191 @@ class AudioEngine {
          return;
       }
 
-      this.playbackSource = this.ctx.createBufferSource();
-      this.playbackSource.buffer = this.recordedBuffer;
-      this.playbackSource.playbackRate.value = this.currentPitch || 1.0;
+      // --- REC TRACK LOGIC (Voice + Drums) ---
+      const playRecordingTrack = () => {
+         // 1. Drums
+         this.playbackTimeouts.forEach(t => clearTimeout(t));
+         this.playbackTimeouts = [];
 
-      this.playbackSource.connect(this.masterGain);
+         this.recordedSequence.forEach(event => {
+            const timeout = setTimeout(() => {
+               if (this.isPlaying) {
+                  if (event.type === 'kick') this.triggerKick();
+                  else if (event.type === 'snare') this.triggerSnare();
+                  else if (event.type === 'hihat') this.triggerHiHat();
+               }
+            }, (event.time / this.recordPitch + this.sequenceDelay) * 1000);
+            this.playbackTimeouts.push(timeout);
+         });
 
-      this.playbackSource.onended = () => {
-         this.isPlaying = false;
-         this.emit('play', false);
+         // 2. Voice
+         if (this.recordedBuffer) {
+            this.playbackSource = this.ctx.createBufferSource();
+            this.playbackSource.buffer = this.recordedBuffer;
+            this.playbackSource.playbackRate.value = this.recordPitch;
+            this.playbackSource.connect(this.masterGain);
+
+            this.playbackSource.onended = () => {
+               if (this.isPlaying && this.recordLoop) {
+                  playRecordingTrack();
+               }
+            };
+
+            this.playbackSource.start();
+         }
       };
 
-      this.playbackSource.start();
+      // --- USER TRACK LOGIC ---
+      const playUserTrack = () => {
+         if (!this.userTrackBuffer) return;
+
+         this.userPlaybackSource = this.ctx.createBufferSource();
+         this.userPlaybackSource.buffer = this.userTrackBuffer;
+         this.userPlaybackSource.playbackRate.value = this.userPitch;
+         this.userPlaybackSource.connect(this.userGain);
+
+         this.userPlaybackSource.onended = () => {
+            if (this.isPlaying && this.userLoop) {
+               playUserTrack();
+            }
+         };
+
+         this.userPlaybackSource.start();
+      };
+
+      // Start Both
+      playRecordingTrack();
+      playUserTrack();
+
       this.isPlaying = true;
       this.emit('play', true);
    }
 
    stopPlayback() {
-      if (this.playbackSource) {
-         this.playbackSource.stop();
-         this.playbackSource = null;
-      }
+      this.stopUserPlayback();
+      this.stopRecordPlayback();
+
       this.isPlaying = false;
       this.emit('play', false);
+   }
+
+   // === SEPARATE TRACK PLAYBACK ===
+
+   // --- Track 1: User Upload ---
+   playUserTrackOnly() {
+      if (!this.userTrackBuffer) {
+         console.warn("No user track to play");
+         return;
+      }
+
+      if (this.isUserPlaying) {
+         this.stopUserPlayback();
+         return;
+      }
+
+      const startUserTrack = () => {
+         this.userPlaybackSource = this.ctx.createBufferSource();
+         this.userPlaybackSource.buffer = this.userTrackBuffer;
+         this.userPlaybackSource.playbackRate.value = this.userPitch;
+         this.userPlaybackSource.connect(this.userGain);
+
+         this.userPlaybackSource.onended = () => {
+            if (this.isUserPlaying && this.userLoop) {
+               startUserTrack();
+            } else {
+               this.isUserPlaying = false;
+               this.emit('userPlay', false);
+            }
+         };
+
+         this.userPlaybackSource.start();
+      };
+
+      startUserTrack();
+      this.isUserPlaying = true;
+      this.emit('userPlay', true);
+   }
+
+   stopUserPlayback() {
+      if (this.userPlaybackSource) {
+         this.userPlaybackSource.onended = null;
+         try { this.userPlaybackSource.stop(); } catch (e) { }
+         this.userPlaybackSource = null;
+      }
+      this.isUserPlaying = false;
+      this.emit('userPlay', false);
+   }
+
+   // --- Track 2: Recording + Drums ---
+   playRecordTrackOnly() {
+      if (!this.recordedBuffer && this.recordedSequence.length === 0) {
+         console.warn("No recording to play");
+         return;
+      }
+
+      if (this.isRecordPlaying) {
+         this.stopRecordPlayback();
+         return;
+      }
+
+      const startRecordTrack = () => {
+         // 1. Drums
+         this.playbackTimeouts.forEach(t => clearTimeout(t));
+         this.playbackTimeouts = [];
+
+         this.recordedSequence.forEach(event => {
+            const timeout = setTimeout(() => {
+               if (this.isRecordPlaying) {
+                  if (event.type === 'kick') this.triggerKick();
+                  else if (event.type === 'snare') this.triggerSnare();
+                  else if (event.type === 'hihat') this.triggerHiHat();
+               }
+            }, (event.time / this.recordPitch + this.sequenceDelay) * 1000);
+            this.playbackTimeouts.push(timeout);
+         });
+
+         // 2. Voice
+         if (this.recordedBuffer) {
+            this.playbackSource = this.ctx.createBufferSource();
+            this.playbackSource.buffer = this.recordedBuffer;
+            this.playbackSource.playbackRate.value = this.recordPitch;
+            this.playbackSource.connect(this.masterGain);
+
+            this.playbackSource.onended = () => {
+               if (this.isRecordPlaying && this.recordLoop) {
+                  startRecordTrack();
+               } else {
+                  this.isRecordPlaying = false;
+                  this.emit('recordPlay', false);
+               }
+            };
+
+            this.playbackSource.start();
+         }
+      };
+
+      startRecordTrack();
+      this.isRecordPlaying = true;
+      this.emit('recordPlay', true);
+   }
+
+   stopRecordPlayback() {
+      if (this.playbackSource) {
+         this.playbackSource.onended = null;
+         try { this.playbackSource.stop(); } catch (e) { }
+         this.playbackSource = null;
+      }
+      // Clear sequencer timeouts
+      this.playbackTimeouts.forEach(t => clearTimeout(t));
+      this.playbackTimeouts = [];
+
+      if (this.loopIntervalID) {
+         clearTimeout(this.loopIntervalID);
+         this.loopIntervalID = null;
+      }
+
+      this.isRecordPlaying = false;
+      this.emit('recordPlay', false);
    }
 
    // --- Scheduler (The Heartbeat) ---
@@ -247,10 +659,6 @@ class AudioEngine {
          this.scheduleNote(this.currentBeat, this.nextNoteTime);
          this.nextNote(); // Advance time
       }
-      // Determine if we need to keep running? 
-      // Yes, we run forever if app is active, 
-      // OR we can pause if both Metronome & Recording & Playback are stopped.
-      // For simplicity in a music app: Keep running.
       this.timerID = window.setTimeout(() => this.schedulerLoop(), this.lookahead);
    }
 
@@ -284,6 +692,146 @@ class AudioEngine {
       setTimeout(() => {
          this.emit('beat', beatNumber);
       }, Math.max(0, timeUntilNote));
+   }
+   // --- Export / Mixing ---
+   async exportMix() {
+      console.log("[AudioEngine] Starting Export Mix...");
+
+      // 1. Calculate Duration
+      let duration = 0;
+      if (this.userTrackBuffer) {
+         duration = Math.max(duration, this.userTrackBuffer.duration / this.userPitch);
+      }
+      if (this.recordedBuffer) {
+         duration = Math.max(duration, this.recordedBuffer.duration / this.recordPitch);
+      }
+      if (this.recordedSequence.length > 0) {
+         const lastEvent = this.recordedSequence[this.recordedSequence.length - 1];
+         const seqDuration = (lastEvent.time / this.recordPitch) + 2.0;
+         duration = Math.max(duration, seqDuration);
+      }
+
+      console.log(`[AudioEngine] Mix Duration: ${duration}s`);
+
+      if (duration === 0) {
+         console.warn("[AudioEngine] Nothing to export (duration 0).");
+         return null;
+      }
+
+      // 2. Offline Context
+      const sampleRate = 44100;
+      const offlineCtx = new OfflineAudioContext(2, Math.ceil(sampleRate * duration), sampleRate);
+
+      // 3. Recreate Graph
+      const offlineMaster = offlineCtx.createGain();
+      offlineMaster.gain.value = 1.0;
+      offlineMaster.connect(offlineCtx.destination);
+
+      // B. User Track
+      if (this.userTrackBuffer) {
+         const userSource = offlineCtx.createBufferSource();
+         userSource.buffer = this.userTrackBuffer;
+         userSource.playbackRate.value = this.userPitch;
+         const userGain = offlineCtx.createGain();
+         userGain.gain.value = this.userVolume;
+         userSource.connect(userGain);
+         userGain.connect(offlineMaster);
+         userSource.start(0);
+         console.log("[AudioEngine] Joined Track 1 to mix");
+      }
+
+      // C. Recorder Track
+      if (this.recordedBuffer) {
+         const recSource = offlineCtx.createBufferSource();
+         recSource.buffer = this.recordedBuffer;
+         recSource.playbackRate.value = this.recordPitch;
+         const recGain = offlineCtx.createGain();
+         recGain.gain.value = this.recordVolume;
+         recSource.connect(recGain);
+         recGain.connect(offlineMaster);
+         recSource.start(0);
+         console.log("[AudioEngine] Joined Track 2 (Voice) to mix");
+      }
+
+      // D. Drums
+      if (this.recordedSequence.length > 0) {
+         this.recordedSequence.forEach(event => {
+            const time = (event.time / this.recordPitch) + this.sequenceDelay;
+            if (time >= duration) return;
+
+            let buffer = null;
+            if (event.type === 'kick') buffer = this.sampleBuffers.kick;
+            else if (event.type === 'snare') buffer = this.sampleBuffers.snare;
+            else if (event.type === 'hihat') buffer = this.sampleBuffers.hihat;
+
+            if (buffer) {
+               const source = offlineCtx.createBufferSource();
+               source.buffer = buffer;
+               source.playbackRate.value = this.recordPitch;
+               const drumGain = offlineCtx.createGain();
+               drumGain.gain.value = this.recordVolume;
+               source.connect(drumGain);
+               drumGain.connect(offlineMaster);
+               source.start(time);
+            }
+         });
+         console.log(`[AudioEngine] Joined ${this.recordedSequence.length} drum hits to mix`);
+      }
+
+      // 4. Render
+      try {
+         const renderedBuffer = await offlineCtx.startRendering();
+         console.log("[AudioEngine] Rendering Complete. Encoding WAV...");
+
+         const wavBlob = this.internalBufferToWav(renderedBuffer);
+         console.log(`[AudioEngine] Mix Exported. Size: ${wavBlob.size} bytes`);
+         return wavBlob;
+      } catch (err) {
+         console.error("[AudioEngine] Export Failed:", err);
+         return null;
+      }
+   }
+
+   // Inline WAV encoder for reliability
+   internalBufferToWav(buffer) {
+      const numOfChan = buffer.numberOfChannels;
+      const length = buffer.length * numOfChan * 2 + 44;
+      const bufferArr = new ArrayBuffer(length);
+      const view = new DataView(bufferArr);
+      const channels = [];
+      let i, sample, offset = 0, pos = 0;
+
+      // Write Header
+      const setUint32 = (data) => { view.setUint32(pos, data, true); pos += 4; };
+      const setUint16 = (data) => { view.setUint16(pos, data, true); pos += 2; };
+      const writeString = (s) => { for (let j = 0; j < s.length; j++) view.setUint8(pos++, s.charCodeAt(j)); };
+
+      writeString('RIFF');
+      setUint32(length - 8);
+      writeString('WAVE');
+      writeString('fmt ');
+      setUint32(16);
+      setUint16(1);
+      setUint16(numOfChan);
+      setUint32(buffer.sampleRate);
+      setUint32(buffer.sampleRate * 2 * numOfChan);
+      setUint16(numOfChan * 2);
+      setUint16(16);
+      writeString('data');
+      setUint32(length - pos - 4);
+
+      for (i = 0; i < numOfChan; i++) channels.push(buffer.getChannelData(i));
+
+      while (pos < length) {
+         for (i = 0; i < numOfChan; i++) {
+            sample = Math.max(-1, Math.min(1, channels[i][offset]));
+            sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0;
+            view.setInt16(pos, sample, true);
+            pos += 2;
+         }
+         offset++;
+      }
+      return new Blob([view], { type: 'audio/wav' });
    }
 }
 

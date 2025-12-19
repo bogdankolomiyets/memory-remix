@@ -7,6 +7,21 @@ export function useAudioEngine() {
    const [currentBeat, setCurrentBeat] = useState(0);
    const [isRecording, setIsRecording] = useState(audioEngine.isRecording);
    const [isMetronomeOn, setIsMetronomeOn] = useState(audioEngine.isMetronomeOn);
+   const [recordingUrl, setRecordingUrl] = useState(null);
+   const [recordedBuffer, setRecordedBuffer] = useState(audioEngine.recordedBuffer);
+   const [userTrackBuffer, setUserTrackBuffer] = useState(audioEngine.userTrackBuffer);
+
+   // Separate Track States
+   const [userVolume, setUserVolumeState] = useState(0.8);
+   const [recordVolume, setRecordVolumeState] = useState(0.8);
+   const [userPitch, setUserPitchState] = useState(1.0);
+   const [recordPitch, setRecordPitchState] = useState(1.0);
+   const [userLoop, setUserLoopState] = useState(false);
+   const [recordLoop, setRecordLoopState] = useState(false);
+
+   // Separate Track Playback States
+   const [isUserPlaying, setIsUserPlaying] = useState(false);
+   const [isRecordPlaying, setIsRecordPlaying] = useState(false);
 
    useEffect(() => {
       // Subscribe to engine events
@@ -17,21 +32,43 @@ export function useAudioEngine() {
          if (event === 'isRecording') setIsRecording(data);
          if (event === 'metronome') setIsMetronomeOn(data);
          if (event === 'recordingComplete') {
+            setRecordingUrl(data);
+            setRecordedBuffer(audioEngine.recordedBuffer);
             console.log("Hook: Recording ready");
          }
+         if (event === 'userFileLoaded') {
+            setUserTrackBuffer(data);
+         }
+         // Sync local state with engine events
+         if (event === 'userLoop') setUserLoopState(data);
+         if (event === 'recordLoop') setRecordLoopState(data);
+         // Per-track playback state
+         if (event === 'userPlay') setIsUserPlaying(data);
+         if (event === 'recordPlay') setIsRecordPlaying(data);
       });
 
       return () => unsubscribe();
    }, []);
 
-   const init = useCallback(() => {
-      audioEngine.init();
+   const init = useCallback(async () => {
+      await audioEngine.init();
    }, []);
 
-   // "PLAY" button now plays the LAST RECORDING
+   // "PLAY" button now plays the LAST RECORDING  (DEPRECATED - use per-track methods)
    const togglePlay = useCallback(() => {
       init();
       audioEngine.playRecording();
+   }, [init]);
+
+   // === PER-TRACK PLAYBACK ===
+   const toggleUserPlay = useCallback(async () => {
+      await init();
+      audioEngine.playUserTrackOnly();
+   }, [init]);
+
+   const toggleRecordPlay = useCallback(async () => {
+      await init();
+      audioEngine.playRecordTrackOnly();
    }, [init]);
 
    const changeBpm = useCallback((newBpm) => {
@@ -53,12 +90,53 @@ export function useAudioEngine() {
       audioEngine.toggleMetronome();
    }, [init]);
 
-   const setVolume = useCallback((val) => {
-      audioEngine.setMasterVolume(val);
+   // Track Controls
+   const setUserVolume = useCallback((val) => {
+      setUserVolumeState(val);
+      audioEngine.setUserVolume(val);
    }, []);
 
-   const setPitch = useCallback((val) => {
-      audioEngine.setPitch(val);
+   const setRecordVolume = useCallback((val) => {
+      setRecordVolumeState(val);
+      audioEngine.setRecordVolume(val);
+   }, []);
+
+   const setUserPitch = useCallback((val) => {
+      setUserPitchState(val);
+      audioEngine.setUserPitch(val);
+   }, []);
+
+   const setRecordPitch = useCallback((val) => {
+      setRecordPitchState(val);
+      audioEngine.setRecordPitch(val);
+   }, []);
+
+   const toggleUserLoop = useCallback(() => {
+      audioEngine.toggleUserLoop();
+   }, []);
+
+   const toggleRecordLoop = useCallback(() => {
+      audioEngine.toggleRecordLoop();
+   }, []);
+
+   const triggerKick = useCallback(() => {
+      audioEngine.triggerKick();
+   }, []);
+
+   const triggerSnare = useCallback(() => {
+      audioEngine.triggerSnare();
+   }, []);
+
+   const triggerHiHat = useCallback(() => {
+      audioEngine.triggerHiHat();
+   }, []);
+
+   const setRecordingDelay = useCallback((ms) => {
+      audioEngine.setRecordingDelay(ms);
+   }, []);
+
+   const loadUserFile = useCallback(async (file) => {
+      return await audioEngine.loadUserFile(file);
    }, []);
 
    return {
@@ -67,13 +145,36 @@ export function useAudioEngine() {
       currentBeat,
       isRecording,
       isMetronomeOn,
+      recordingUrl,
+      recordedBuffer,
+      userTrackBuffer,
+
+      // Separate Track State
+      userVolume, recordVolume,
+      userPitch, recordPitch,
+      userLoop, recordLoop,
+
+      // Per-track Playback State
+      isUserPlaying, isRecordPlaying,
+
       togglePlay,
+      toggleUserPlay,
+      toggleRecordPlay,
       setBpm: changeBpm,
       startRecording,
       stopRecording,
       toggleMetronome,
-      setVolume,
-      setPitch,
-      init
+
+      // Separate Track Setters
+      setUserVolume, setRecordVolume,
+      setUserPitch, setRecordPitch,
+      toggleUserLoop, toggleRecordLoop,
+
+      triggerKick,
+      triggerSnare,
+      triggerHiHat,
+      setRecordingDelay,
+      init,
+      loadUserFile
    };
 }
