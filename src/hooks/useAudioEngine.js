@@ -8,6 +8,8 @@ export function useAudioEngine() {
    const [isRecording, setIsRecording] = useState(audioEngine.isRecording);
    const [isMetronomeOn, setIsMetronomeOn] = useState(audioEngine.isMetronomeOn);
    const [recordingUrl, setRecordingUrl] = useState(null);
+   const [recordedBuffer, setRecordedBuffer] = useState(audioEngine.recordedBuffer);
+   const [userTrackBuffer, setUserTrackBuffer] = useState(audioEngine.userTrackBuffer);
 
    // Separate Track States
    const [userVolume, setUserVolumeState] = useState(0.8);
@@ -16,6 +18,10 @@ export function useAudioEngine() {
    const [recordPitch, setRecordPitchState] = useState(1.0);
    const [userLoop, setUserLoopState] = useState(false);
    const [recordLoop, setRecordLoopState] = useState(false);
+
+   // Separate Track Playback States
+   const [isUserPlaying, setIsUserPlaying] = useState(false);
+   const [isRecordPlaying, setIsRecordPlaying] = useState(false);
 
    useEffect(() => {
       // Subscribe to engine events
@@ -27,24 +33,42 @@ export function useAudioEngine() {
          if (event === 'metronome') setIsMetronomeOn(data);
          if (event === 'recordingComplete') {
             setRecordingUrl(data);
+            setRecordedBuffer(audioEngine.recordedBuffer);
             console.log("Hook: Recording ready");
+         }
+         if (event === 'userFileLoaded') {
+            setUserTrackBuffer(data);
          }
          // Sync local state with engine events
          if (event === 'userLoop') setUserLoopState(data);
          if (event === 'recordLoop') setRecordLoopState(data);
+         // Per-track playback state
+         if (event === 'userPlay') setIsUserPlaying(data);
+         if (event === 'recordPlay') setIsRecordPlaying(data);
       });
 
       return () => unsubscribe();
    }, []);
 
-   const init = useCallback(() => {
-      audioEngine.init();
+   const init = useCallback(async () => {
+      await audioEngine.init();
    }, []);
 
-   // "PLAY" button now plays the LAST RECORDING
+   // "PLAY" button now plays the LAST RECORDING  (DEPRECATED - use per-track methods)
    const togglePlay = useCallback(() => {
       init();
       audioEngine.playRecording();
+   }, [init]);
+
+   // === PER-TRACK PLAYBACK ===
+   const toggleUserPlay = useCallback(async () => {
+      await init();
+      audioEngine.playUserTrackOnly();
+   }, [init]);
+
+   const toggleRecordPlay = useCallback(async () => {
+      await init();
+      audioEngine.playRecordTrackOnly();
    }, [init]);
 
    const changeBpm = useCallback((newBpm) => {
@@ -122,13 +146,20 @@ export function useAudioEngine() {
       isRecording,
       isMetronomeOn,
       recordingUrl,
+      recordedBuffer,
+      userTrackBuffer,
 
       // Separate Track State
       userVolume, recordVolume,
       userPitch, recordPitch,
       userLoop, recordLoop,
 
+      // Per-track Playback State
+      isUserPlaying, isRecordPlaying,
+
       togglePlay,
+      toggleUserPlay,
+      toggleRecordPlay,
       setBpm: changeBpm,
       startRecording,
       stopRecording,

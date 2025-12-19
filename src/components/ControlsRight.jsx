@@ -1,10 +1,15 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useAudioEngine } from '../hooks/useAudioEngine';
+import HiHatIconSrc from '../svg/Hi-Hat Icon.svg';
+import SnareIconSrc from '../svg/Snare_Icon.svg';
+import KickIconSrc from '../svg/Kick_Icon.svg';
+import MetronomeIconSrc from '../svg/Metronome—Icon.svg';
 
-const ControlsRight = () => {
+const ControlsRight = ({ onSubmit, activeHintTarget }) => {
    const {
       bpm, setBpm, currentBeat, toggleMetronome, isMetronomeOn,
-      triggerKick, triggerSnare, triggerHiHat, init
+      triggerKick, triggerSnare, triggerHiHat, init,
+      recordedBuffer, userTrackBuffer
    } = useAudioEngine();
 
    // Local state for pad visual feedback
@@ -14,6 +19,10 @@ const ControlsRight = () => {
       hihat: false
    });
 
+   // Toast notification state
+   const [showToast, setShowToast] = useState(false);
+   const toastTimeoutRef = useRef(null);
+
    const flashPad = useCallback((pad) => {
       setActivePads(prev => ({ ...prev, [pad]: true }));
       setTimeout(() => {
@@ -21,20 +30,20 @@ const ControlsRight = () => {
       }, 100);
    }, []);
 
-   const handleKick = useCallback(() => {
-      init();
+   const handleKick = useCallback(async () => {
+      await init();
       triggerKick();
       flashPad('kick');
    }, [init, triggerKick, flashPad]);
 
-   const handleSnare = useCallback(() => {
-      init();
+   const handleSnare = useCallback(async () => {
+      await init();
       triggerSnare();
       flashPad('snare');
    }, [init, triggerSnare, flashPad]);
 
-   const handleHiHat = useCallback(() => {
-      init();
+   const handleHiHat = useCallback(async () => {
+      await init();
       triggerHiHat();
       flashPad('hihat');
    }, [init, triggerHiHat, flashPad]);
@@ -53,56 +62,87 @@ const ControlsRight = () => {
    }, [handleKick, handleSnare, handleHiHat]);
 
 
-   // --- Radial Slider Logic ---
-   const radialRef = useRef(null);
+   // BPM range for circular slider
+   const MIN_BPM = 40;
+   const MAX_BPM = 208;
+
+   // --- Arc Slider Logic (Speedometer Style, 270 degrees, gap at bottom) ---
+   const dialRef = useRef(null);
    const [isDragging, setIsDragging] = useState(false);
 
-   // Convert BPM to Angle (0 - 360)
-   // Range: 40 - 208 BPM
+   // Arc spans 270 degrees with 90-degree gap at the bottom
+   // Start at bottom-left (225°) → end at bottom-right (495° = 135° wrapped)
+   const ARC_START_ANGLE = 225; // degrees (bottom-left)
+   const ARC_END_ANGLE = 495;   // degrees (bottom-right, wraps around)
+   const ARC_SPAN = 270;         // total degrees
+   const RADIUS = 56;            // Arc radius (hugging button edge)
+   const CENTER = 72;            // center of 144x144 viewBox
+
+   // Convert BPM to angle on the arc
    const bpmToAngle = (value) => {
-      const min = 40;
-      const max = 208;
-      // Map 40->0deg, 208->359deg (approx)
-      return ((value - min) / (max - min)) * 360;
+      const ratio = (value - MIN_BPM) / (MAX_BPM - MIN_BPM);
+      return ARC_START_ANGLE + ratio * ARC_SPAN;
    };
 
-   // Helper to calculate position of the dot on the circle
-   const getDotPosition = (angle, radius) => {
-      const rad = (angle - 90) * (Math.PI / 180); // -90 to start at top
-      return {
-         x: radius + radius * Math.cos(rad),
-         y: radius + radius * Math.sin(rad)
-      };
+   // Convert angle to BPM (clamped to arc range)
+   const angleToBpm = (angle) => {
+      let normalizedAngle = angle;
+      if (normalizedAngle < 0) normalizedAngle += 360;
+      if (normalizedAngle >= 360) normalizedAngle %= 360;
+
+      // Handle the wrap-around
+      let arcAngle = normalizedAngle;
+      if (normalizedAngle < ARC_START_ANGLE && normalizedAngle < 135) {
+         arcAngle = normalizedAngle + 360;
+      }
+
+      // Clamp to arc bounds
+      if (arcAngle < ARC_START_ANGLE) return MIN_BPM;
+      if (arcAngle > ARC_END_ANGLE) return MAX_BPM;
+
+      const ratio = (arcAngle - ARC_START_ANGLE) / ARC_SPAN;
+      return Math.round(MIN_BPM + ratio * (MAX_BPM - MIN_BPM));
    };
 
+   // Polar to cartesian for handle position
+   const polarToCartesian = (cx, cy, r, angleDeg) => {
+      const rad = (angleDeg - 90) * (Math.PI / 180);
+      return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
+   };
+
+   // Generate SVG arc path
+   const describeArc = (cx, cy, r, startAngle, endAngle) => {
+      const start = polarToCartesian(cx, cy, r, endAngle);
+      const end = polarToCartesian(cx, cy, r, startAngle);
+      const largeArcFlag = (endAngle - startAngle) <= 180 ? 0 : 1;
+      return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArcFlag} 0 ${end.x} ${end.y}`;
+   };
+
+   const arcPath = describeArc(CENTER, CENTER, RADIUS, ARC_START_ANGLE, ARC_END_ANGLE);
+   const currentAngle = bpmToAngle(bpm);
+   const handlePos = polarToCartesian(CENTER, CENTER, RADIUS, currentAngle);
+
+   // Pointer interaction handlers
    const handleRadialInteraction = (e) => {
-      if (!radialRef.current) return;
-      const rect = radialRef.current.getBoundingClientRect();
+      if (!dialRef.current) return;
+      const rect = dialRef.current.getBoundingClientRect();
       const clientX = e.touches ? e.touches[0].clientX : e.clientX;
       const clientY = e.touches ? e.touches[0].clientY : e.clientY;
 
       const centerX = rect.left + rect.width / 2;
       const centerY = rect.top + rect.height / 2;
-
       const deltaX = clientX - centerX;
       const deltaY = clientY - centerY;
 
-      // Calculate Angle (radians to degrees)
       let angle = Math.atan2(deltaY, deltaX) * (180 / Math.PI) + 90;
       if (angle < 0) angle += 360;
 
-      // Map Angle to BPM
-      // 0 deg = 40 bpm, 360 deg = 208 bpm
-      const min = 40;
-      const max = 208;
-      const newBpm = Math.round(min + (angle / 360) * (max - min));
-
-      // Clamp
-      const clampedBpm = Math.max(min, Math.min(max, newBpm));
-      setBpm(clampedBpm);
+      const newBpm = angleToBpm(angle);
+      setBpm(Math.max(MIN_BPM, Math.min(MAX_BPM, newBpm)));
    };
 
    const handleMouseDown = (e) => {
+      if (e.target.closest('.metronome-btn')) return; // Don't drag if clicking button
       setIsDragging(true);
       handleRadialInteraction(e);
    };
@@ -110,7 +150,7 @@ const ControlsRight = () => {
    useEffect(() => {
       const handleGlobalMove = (e) => {
          if (isDragging) {
-            e.preventDefault(); // Prevent scrolling on touch
+            e.preventDefault();
             handleRadialInteraction(e);
          }
       };
@@ -131,114 +171,106 @@ const ControlsRight = () => {
       };
    }, [isDragging]);
 
-   const radius = 56; // 1/2 of width (112px approx to fit around 90px button)
-   const angle = bpmToAngle(bpm);
-   const dotPos = getDotPosition(angle, radius);
-
+   // Check if we can submit
+   const canSubmit = !!(recordedBuffer || userTrackBuffer);
 
    return (
-      <div className="controls-right">
-         {/* 1. Drum Pads */}
-         <div className="pads-group">
-            {/* Hi-Hat */}
-            <button
-               className={`circle-btn pad-btn ${activePads.hihat ? 'active' : ''}`}
-               onClick={handleHiHat}
-            >
-               <div className="pad-icon-svg">
-                  {/* Two plates + stick */}
-                  <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="currentColor" strokeWidth="2">
-                     <ellipse cx="20" cy="14" rx="14" ry="3" />
-                     <ellipse cx="20" cy="20" rx="14" ry="3" />
-                     <line x1="20" y1="14" x2="20" y2="34" />
-                  </svg>
-               </div>
-               <span className="pad-label">HI-HAT</span>
-            </button>
-
-            {/* Snare */}
-            <button
-               className={`circle-btn pad-btn ${activePads.snare ? 'active' : ''}`}
-               onClick={handleSnare}
-            >
-               <div className="pad-icon-svg">
-                  {/* Cylinder + Stick */}
-                  <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="currentColor" strokeWidth="2">
-                     <ellipse cx="20" cy="18" rx="14" ry="4" />
-                     <path d="M6 18v10c0 2.2 6.3 4 14 4s14-1.8 14-4V18" strokeLinecap="round" />
-                     <line x1="20" y1="18" x2="34" y2="6" strokeLinecap="round" />
-                  </svg>
-               </div>
-               <span className="pad-label">SNARE</span>
-            </button>
-
-            {/* Kick */}
-            <button
-               className={`circle-btn pad-btn ${activePads.kick ? 'active' : ''}`}
-               onClick={handleKick}
-            >
-               <div className="pad-icon-svg">
-                  {/* Pedal / Drum side view */}
-                  <svg width="40" height="40" viewBox="0 0 40 40" fill="none" stroke="currentColor" strokeWidth="2">
-                     <ellipse cx="14" cy="20" rx="4" ry="12" />
-                     <path d="M14 8 L32 20" />
-                     <circle cx="32" cy="20" r="3" />
-                  </svg>
-               </div>
-               <span className="pad-label">KICK</span>
-            </button>
-         </div>
-
-         {/* 2. Metronome Group */}
-         <div className="metronome-group">
-            {/* Radial Slider Container */}
-            <div
-               className="radial-slider-container"
-               ref={radialRef}
-               onMouseDown={handleMouseDown}
-               onTouchStart={handleMouseDown}
-            >
-               {/* Metronome Button (Center) */}
-               <button
-                  className={`circle-btn metronome-btn ${isMetronomeOn && currentBeat === 0 ? 'pulse' : ''}`}
-                  onClick={(e) => { e.stopPropagation(); toggleMetronome(); }}
-                  style={{ zIndex: 10, position: 'relative' }}
-               >
-                  <div className="bpm-icon">
-                     {/* Triangle Metronome */}
-                     <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2L2 22h20L12 2z" />
-                        <line x1="12" y1="18" x2="18" y2="8" stroke="var(--color-bg-panel)" strokeWidth="2" />
-                     </svg>
+      <div className="rightSide">
+         <div className="controls-right">
+            {/* 1. Drum Pads */}
+            <div className="pads-group">
+               <button className={`circle-btn pad-btn ${activePads.hihat ? 'active' : ''} ${activeHintTarget === 'pads-group' ? 'hint-highlight' : ''}`} onClick={handleHiHat}>
+                  <div className="pad-icon-svg">
+                     <img src={HiHatIconSrc} alt="Hi-Hat" className="pad-svg-icon" />
                   </div>
-                  <div className="bpm-text-group">
-                     <span className="bpm-label">METRONOME</span>
-                     <span className="bpm-value">{bpm} BPM</span>
-                  </div>
+                  <span className="pad-label">HI-HAT</span>
                </button>
 
-               {/* SVG Ring */}
-               <svg className="radial-ring" width="112" height="112" viewBox="0 0 112 112">
-                  {/* Track */}
-                  <circle cx="56" cy="56" r="55" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
-                  {/* Thumb Dot */}
-                  <circle
-                     cx={dotPos.x}
-                     cy={dotPos.y}
-                     r="5"
-                     fill="white"
-                     stroke="var(--color-bg-dark)"
-                     strokeWidth="2"
-                  />
-               </svg>
-            </div>
-         </div>
+               <button className={`circle-btn pad-btn ${activePads.snare ? 'active' : ''} ${activeHintTarget === 'pads-group' ? 'hint-highlight' : ''}`} onClick={handleSnare}>
+                  <div className="pad-icon-svg">
+                     <img src={SnareIconSrc} alt="Snare" className="pad-svg-icon" />
+                  </div>
+                  <span className="pad-label">SNARE</span>
+               </button>
 
-         {/* 3. Submit Button */}
-         <div className="submit-group">
-            <button className="circle-btn submit-btn">
-               SUBMIT
-            </button>
+               <button className={`circle-btn pad-btn ${activePads.kick ? 'active' : ''} ${activeHintTarget === 'pads-group' ? 'hint-highlight' : ''}`} onClick={handleKick}>
+                  <div className="pad-icon-svg">
+                     <img src={KickIconSrc} alt="Kick" className="pad-svg-icon" />
+                  </div>
+                  <span className="pad-label">KICK</span>
+               </button>
+            </div>
+
+            {/* 2. Metronome Group with custom SVG arc slider (Speedometer style) */}
+            <div className="metronome-group">
+               <div
+                  ref={dialRef}
+                  className="metronome-dial-container"
+                  onMouseDown={handleMouseDown}
+                  onTouchStart={handleMouseDown}
+               >
+                  {/* Center button */}
+                  <button
+                     className={`circle-btn metronome-btn ${isMetronomeOn && currentBeat === 0 ? 'pulse' : ''} ${activeHintTarget === 'metronome-btn' ? 'hint-highlight' : ''}`}
+                     onClick={toggleMetronome}
+                  >
+                     <div className="bpm-icon">
+                        <img src={MetronomeIconSrc} alt="Metronome" className="metronome-svg-icon" />
+                     </div>
+                     <div className="bpm-text-group">
+                        <span className="bpm-label">METRONOME</span>
+                        <span className="bpm-value"><strong>{bpm} BPM</strong></span>
+                     </div>
+                  </button>
+
+                  {/* Custom SVG arc slider */}
+                  <svg className="radial-ring" width="160" height="160" viewBox="0 0 144 144" style={{ overflow: 'visible' }}>
+                     {/* Arc track (270 degrees, gap at bottom) */}
+                     <path
+                        d={arcPath}
+                        fill="none"
+                        stroke="rgba(255,255,255,0.2)"
+                        strokeWidth="1"
+                        strokeLinecap="round"
+                     />
+                     {/* Handle/thumb */}
+                     <circle
+                        cx={handlePos.x}
+                        cy={handlePos.y}
+                        r="8"
+                        fill="var(--color-cyan)"
+                        stroke="var(--color-cream)"
+                        strokeWidth="1"
+                        style={{ cursor: 'grab' }}
+                     />
+                  </svg>
+               </div>
+            </div>
+
+            {/* 3. Submit Button */}
+            <div className="submit-group">
+               <button
+                  className={`circle-btn submit-btn ${!canSubmit ? 'disabled' : ''}`}
+                  onClick={() => {
+                     if (!canSubmit) {
+                        // Show toast warning
+                        setShowToast(true);
+                        if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+                        toastTimeoutRef.current = setTimeout(() => setShowToast(false), 3000);
+                     } else {
+                        onSubmit();
+                     }
+                  }}
+               >
+                  SUBMIT
+               </button>
+
+               {/* Toast Notification */}
+               <div className={`submit-toast ${showToast ? 'visible' : ''}`}>
+                  <span>⚠️</span>
+                  <p>Please record or upload audio first!</p>
+               </div>
+            </div>
          </div>
       </div>
    );
