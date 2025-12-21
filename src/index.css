@@ -595,7 +595,7 @@ html {
 .controls-right {
    position: relative;
    width: 160px !important;
-   height: 90% !important;
+   height: 80% !important;
    background: transparent;
    border: 1px solid rgba(255, 255, 255, 0.6);
    border-radius: 5px;
@@ -629,8 +629,8 @@ html {
 }
 
 .pad-btn {
-   width: 120px;
-   height: 120px;
+   width: 117px;
+   height: 117px;
    border-radius: 50%;
    cursor: pointer;
    display: flex;
@@ -706,7 +706,6 @@ html {
 
 /* Metronome Group */
 .metronome-group {
-   margin-top: auto;
    display: flex;
    flex-direction: column;
    align-items: center;
@@ -819,23 +818,25 @@ html {
 }
 
 .bpm-icon {
+   margin-left: 5px;
    display: flex;
    justify-content: center;
    align-items: center;
-   width: 24px;
-   height: 22px;
-   margin-bottom: 4px;
+   width: 38px;
+   height: auto;
    overflow: hidden;
    position: relative;
+   bottom: -5px;
 }
 
 .bpm-icon svg {
-   width: 24px;
-   height: 22px;
+   width: 38px;
+   height: auto;
    position: relative;
 }
 
 .bpm-text-group {
+   margin-top: 5px;
    display: flex;
    flex-direction: column;
    align-items: center;
@@ -844,20 +845,26 @@ html {
 }
 
 .bpm-label {
-   font-size: 0.55rem;
-   font-weight: 700;
+   font-size: 0.8rem;
+   font-weight: 300;
 
 }
 
 .bpm-value {
    font-size: 0.7rem;
-   font-weight: 800;
+   font-weight: 500;
 }
 
 /* Submit Button */
 .submit-group {
-   margin-top: 1rem;
+   margin-top: auto;
    margin-bottom: 1rem;
+   font-weight: 300;
+   font-family: var(--font-main);
+}
+.submit-group button{
+   font-weight: 300!important;
+   font-family: var(--font-main)!important;
 }
 
 .submit-btn {
@@ -867,7 +874,7 @@ html {
    border: 1px solid var(--color-cream) !important;
    color: var(--color-cream) !important;
    font-size: 0.8rem;
-   font-family: var(--font-display, serif);
+   font-family: var(--font-main);
    font-weight: bold;
    letter-spacing: 1px;
 }
@@ -876,6 +883,18 @@ html {
    background: rgba(255, 255, 255, 0.1) !important;
    border-color: var(--color-highlight) !important;
    color: var(--color-highlight) !important;
+}
+
+.submit-btn.disabled {
+   opacity: 0.4;
+   /* cursor: not-allowed; */
+   pointer-events: auto;
+}
+
+.submit-btn.disabled:hover {
+   background: transparent !important;
+   border-color: var(--color-cream) !important;
+   color: var(--color-cream) !important;
 }
 
 .submit-btn.processing {
@@ -982,10 +1001,10 @@ html {
 
 .submission-sidebar {
    position: fixed;
-   top: 0;
+   top: 105px;
    right: 0;
    width: 450px;
-   height: 100%;
+   height: calc(100% - 100px);
    background: var(--color-cream);
    color: var(--color-dark-blue);
    box-shadow: -5px 0 20px rgba(0, 0, 0, 0.2);
@@ -1099,6 +1118,7 @@ html {
    border-bottom: 2px solid var(--color-accent);
    padding: 0.5rem 0;
    font-size: 1.1rem;
+
    color: var(--color-text-dark);
    font-family: var(--font-main);
    outline: none;
@@ -1116,7 +1136,7 @@ html {
 .file-drop-zone {
    border: 2px solid var(--color-accent);
    border-radius: 8px;
-   padding: 2rem;
+   padding: 1.5rem;
    text-align: center;
    margin: 1rem 0;
    background: rgba(255, 255, 255, 0.5);

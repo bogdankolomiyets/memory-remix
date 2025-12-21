@@ -20,16 +20,11 @@ export default defineConfig({
     rollupOptions: {
       input: 'src/main.jsx',
       output: {
-        format: 'iife',
         entryFileNames: 'bundle.js',
         assetFileNames: 'assets/[name].[ext]',
       },
     },
     cssCodeSplit: false,
-    minify: 'esbuild',
-  },
-  esbuild: {
-    drop: ['console', 'debugger'],
   },
 })
 
