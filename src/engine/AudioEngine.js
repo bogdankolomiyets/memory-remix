@@ -103,6 +103,8 @@ class AudioEngine {
       if (this.ctx.state === 'suspended') {
          await this.ctx.resume();
       }
+      // Generate synthetic drum samples if not loaded from external files
+      this.generateSynthSamples();
    }
 
    async loadSample(name, url) {
@@ -131,6 +133,76 @@ class AudioEngine {
          console.error("[AudioEngine] Failed to decode user file:", err);
          return false;
       }
+   }
+
+   // Generate synthetic drum samples as AudioBuffers (for export)
+   generateSynthSamples() {
+      // Only generate if not already loaded from external files
+      if (!this.sampleBuffers.kick) {
+         this.sampleBuffers.kick = this.generateKickBuffer();
+      }
+      if (!this.sampleBuffers.snare) {
+         this.sampleBuffers.snare = this.generateSnareBuffer();
+      }
+      if (!this.sampleBuffers.hihat) {
+         this.sampleBuffers.hihat = this.generateHiHatBuffer();
+      }
+   }
+
+   generateKickBuffer() {
+      const duration = 0.5;
+      const sampleRate = this.ctx.sampleRate;
+      const length = sampleRate * duration;
+      const buffer = this.ctx.createBuffer(1, length, sampleRate);
+      const data = buffer.getChannelData(0);
+
+      for (let i = 0; i < length; i++) {
+         const t = i / sampleRate;
+         // Exponential frequency sweep from 150Hz to near 0
+         const freq = 150 * Math.exp(-t * 10);
+         // Exponential amplitude decay
+         const amp = Math.exp(-t * 8);
+         data[i] = Math.sin(2 * Math.PI * freq * t) * amp;
+      }
+      return buffer;
+   }
+
+   generateSnareBuffer() {
+      const duration = 0.2;
+      const sampleRate = this.ctx.sampleRate;
+      const length = sampleRate * duration;
+      const buffer = this.ctx.createBuffer(1, length, sampleRate);
+      const data = buffer.getChannelData(0);
+
+      for (let i = 0; i < length; i++) {
+         const t = i / sampleRate;
+         // White noise with envelope
+         const noise = (Math.random() * 2 - 1);
+         // Tone component
+         const tone = Math.sin(2 * Math.PI * 180 * t);
+         // Envelope
+         const env = Math.exp(-t * 20);
+         data[i] = (noise * 0.8 + tone * 0.2) * env;
+      }
+      return buffer;
+   }
+
+   generateHiHatBuffer() {
+      const duration = 0.08;
+      const sampleRate = this.ctx.sampleRate;
+      const length = sampleRate * duration;
+      const buffer = this.ctx.createBuffer(1, length, sampleRate);
+      const data = buffer.getChannelData(0);
+
+      for (let i = 0; i < length; i++) {
+         const t = i / sampleRate;
+         // High-passed white noise
+         const noise = (Math.random() * 2 - 1);
+         // Very fast envelope
+         const env = Math.exp(-t * 50) * 0.3;
+         data[i] = noise * env;
+      }
+      return buffer;
    }
 
    subscribe(cb) {
