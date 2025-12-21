@@ -64,12 +64,27 @@ html {
    background: var(--color-accent);
    color: var(--color-highlight);
    border: none;
+   box-shadow: inset 0 3px 6px rgba(0, 0, 0, 0.15);
 }
 
 
 
 .circle-btn:active {
    opacity: 0.9;
+}
+
+/* Disabled state for buttons - only gray out icon and text */
+.circle-btn.disabled,
+.circle-btn:disabled {
+   cursor: not-allowed;
+   pointer-events: none;
+}
+
+.circle-btn.disabled svg,
+.circle-btn:disabled svg,
+.circle-btn.disabled .btn-label,
+.circle-btn:disabled .btn-label {
+   opacity: 0.4;
 }
 
 /* Left Sidebar Button Hover - Blue to var(--color-cream) */
@@ -132,7 +147,7 @@ html {
 
 /* --- Left Sidebar Container --- */
 .leftSide {
-   height: 100vh;
+   height: 90vh;
    width: 30vw;
    display: flex;
    flex-direction: row;
@@ -193,14 +208,40 @@ html {
 }
 
 .controls-left .loop-btn:hover {
+   filter: brightness(0.9);
+}
+
+.controls-left .loop-btn:hover .btn-label {
+   color: var(--color-cream);
+}
+
+/* Loop button active state */
+.controls-left .loop-btn.active {
    background-color: var(--color-cream) !important;
-   color: var(--color-dark-blue) !important;
    border: 1px solid var(--color-dark-blue) !important;
 }
 
-.controls-left .loop-btn svg {
-   stroke: currentColor;
+.controls-left .loop-btn.active .btn-label {
+   color: var(--color-dark-blue) !important;
 }
+
+.controls-left .loop-btn.active:hover {
+   filter: brightness(0.95);
+   /* color: var(--color-dark-blue); */
+}
+
+.controls-left .loop-btn.active:hover .btn-label {
+   color: var(--color-dark-blue) !important;
+}
+
+.controls-left .loop-btn.active svg circle {
+   stroke: var(--color-dark-blue) !important;
+}
+
+.controls-left .loop-btn.active svg circle:first-of-type {
+   fill: var(--color-dark-blue) !important;
+}
+
 
 /* Play Button */
 .play-btn {
@@ -237,26 +278,9 @@ html {
    color: var(--color-dark-blue) !important;
 }
 
-/* Recording + Hover state */
+/* Recording + Hover state - just darken slightly */
 .rec-btn.recording:hover {
-   background-color: var(--color-dark-blue) !important;
-   color: var(--color-cream) !important;
-   border: none !important;
-}
-
-.controls-left .rec-btn.recording:hover .rec-svg-icon,
-.rec-btn.recording:hover .rec-svg-icon {
-   color: #e74c3c !important;
-}
-
-.controls-left .rec-btn.recording:hover .rec-svg-icon circle,
-.rec-btn.recording:hover .rec-svg-icon circle {
-   fill: #e74c3c !important;
-}
-
-.controls-left .rec-btn.recording:hover .btn-label,
-.rec-btn.recording:hover .btn-label {
-   color: var(--color-cream) !important;
+   filter: brightness(0.9);
 }
 
 @keyframes pulse-white {
@@ -279,6 +303,7 @@ html {
    flex-direction: row;
    gap: 0.5rem;
    width: 100%;
+   height: 35%;
    justify-content: center;
    padding: 0 0.5rem;
 }
@@ -296,6 +321,26 @@ html {
    font-weight: 700;
    color: var(--color-dark-blue);
    letter-spacing: 0.5px;
+}
+
+.slider-minmax-icon {
+   width: auto;
+   height: 18px;
+   display: block;
+}
+
+.slider-pitch-max-icon {
+   height: 11px;
+   width: 18px;
+   display: block;
+   margin-bottom: 7px;
+}
+
+.slider-pitch-min-icon {
+   height: auto;
+   width: 16px;
+   display: block;
+   margin-top: 7px;
 }
 
 .slider-icon-wrapper {
@@ -317,6 +362,10 @@ html {
    height: 7px;
    pointer-events: none;
    z-index: 5;
+}
+
+.slider-handle>rect {
+   fill: var(--color-dark-blue);
 }
 
 .slider-overlay-input {
@@ -533,7 +582,7 @@ html {
 
 /* --- Right Sidebar Container --- */
 .rightSide {
-   height: 100vh;
+   height: 90vh;
    width: 20vw;
    display: flex;
    flex-direction: column;
@@ -546,7 +595,7 @@ html {
 .controls-right {
    position: relative;
    width: 160px !important;
-   height: 80% !important;
+   height: 90% !important;
    background: transparent;
    border: 1px solid rgba(255, 255, 255, 0.6);
    border-radius: 5px;
@@ -593,12 +642,20 @@ html {
 
 .pad-btn:hover {
    background-color: var(--color-dark-blue);
-   color: var(--color-cream);
    border: 1px solid var(--color-cream);
 }
 
-.pad-btn:hover>.pad-label {
+.pad-btn:hover .pad-label {
    color: var(--color-cream) !important;
+}
+
+.pad-btn:hover svg path,
+.pad-btn:hover svg line {
+   stroke: var(--color-cream) !important;
+}
+
+.pad-btn:hover svg circle {
+   fill: var(--color-cream) !important;
 }
 
 .pad-btn.active,
@@ -606,6 +663,23 @@ html {
    background-color: var(--color-dark-blue);
    color: var(--color-cream);
    border: 1px solid var(--color-cream);
+}
+
+.pad-btn.active .pad-label,
+.pad-btn:active .pad-label {
+   color: var(--color-cream) !important;
+}
+
+.pad-btn.active svg path,
+.pad-btn.active svg line,
+.pad-btn:active svg path,
+.pad-btn:active svg line {
+   stroke: var(--color-cream) !important;
+}
+
+.pad-btn.active svg circle,
+.pad-btn:active svg circle {
+   fill: var(--color-cream) !important;
 }
 
 .pad-icon-svg {
@@ -627,7 +701,6 @@ html {
 .controls-right .pad-btn .pad-label {
    color: var(--color-dark-blue);
    margin-top: 2px;
-
 }
 
 
@@ -710,17 +783,56 @@ html {
 }
 
 .metronome-btn:hover {
-   background-color: var(--color-cream) !important;
-   box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+   filter: brightness(0.9);
 }
 
+/* Metronome Active State */
+.metronome-btn.active {
+   background-color: var(--color-dark-blue) !important;
+   color: var(--color-cream) !important;
+   border: 1px solid var(--color-cream) !important;
+}
+
+.metronome-btn.active .bpm-label,
+.metronome-btn.active .bpm-value {
+   color: var(--color-cream) !important;
+}
+
+.metronome-btn.active svg path {
+   fill: var(--color-cream) !important;
+}
+
+.metronome-btn.active svg circle {
+   fill: var(--color-cream) !important;
+}
+
+.metronome-btn.active svg line {
+   stroke: var(--color-cream) !important;
+}
+
+.metronome-btn.active:hover {
+   filter: brightness(0.9);
+}
 
 .metronome-btn.pulse {
    scale: 1;
 }
 
 .bpm-icon {
-   margin-bottom: 2px;
+   display: flex;
+   justify-content: center;
+   align-items: center;
+   width: 24px;
+   height: 22px;
+   margin-bottom: 4px;
+   overflow: hidden;
+   position: relative;
+}
+
+.bpm-icon svg {
+   width: 24px;
+   height: 22px;
+   position: relative;
 }
 
 .bpm-text-group {
@@ -764,6 +876,53 @@ html {
    background: rgba(255, 255, 255, 0.1) !important;
    border-color: var(--color-highlight) !important;
    color: var(--color-highlight) !important;
+}
+
+.submit-btn.processing {
+   pointer-events: none;
+   display: flex;
+   flex-direction: column;
+   align-items: center;
+   justify-content: center;
+   gap: 8px;
+}
+
+.submit-spinner {
+   width: 40px;
+   height: 40px;
+   animation: spin 1.2s linear infinite;
+}
+
+.spinner-track {
+   stroke: rgba(255, 255, 255, 0.2);
+}
+
+.spinner-progress {
+   stroke: var(--color-cream);
+   stroke-linecap: round;
+   transform-origin: center;
+}
+
+.submit-text {
+   font-size: 0.55rem;
+   letter-spacing: 0.5px;
+}
+
+.submit-hint {
+   font-size: 0.45rem;
+   opacity: 0.7;
+   font-style: italic;
+   margin-top: 2px;
+}
+
+@keyframes spin {
+   0% {
+      transform: rotate(0deg);
+   }
+
+   100% {
+      transform: rotate(360deg);
+   }
 }
 
 .submit-toast {
@@ -1184,9 +1343,10 @@ html {
 }
 
 .hint-panel-minimized {
-   position: absolute;
-   left: 140px;
-   bottom: 40px;
+   position: relative;
+   left: 20px;
+   bottom: 8vh;
+   align-self: flex-end;
    background: rgba(0, 51, 84, 0.8);
    border: 2px solid var(--color-cream);
    color: var(--color-cream);

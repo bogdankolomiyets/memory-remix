@@ -23,6 +23,16 @@ export function useAudioEngine() {
    const [isUserPlaying, setIsUserPlaying] = useState(false);
    const [isRecordPlaying, setIsRecordPlaying] = useState(false);
 
+   // Track current audio URL for 3D sync events
+   const [currentAudioUrl, setCurrentAudioUrl] = useState(null);
+
+   // Helper to dispatch 3D sync event
+   const dispatch3DSync = useCallback((url, playing) => {
+      window.dispatchEvent(new CustomEvent('memory-audio-sync', {
+         detail: { url, isPlaying: playing }
+      }));
+   }, []);
+
    useEffect(() => {
       // Subscribe to engine events
       const unsubscribe = audioEngine.subscribe((event, data) => {
@@ -34,7 +44,9 @@ export function useAudioEngine() {
          if (event === 'recordingComplete') {
             setRecordingUrl(data);
             setRecordedBuffer(audioEngine.recordedBuffer);
-            console.log("Hook: Recording ready");
+            setCurrentAudioUrl(data); // Store URL for 3D sync
+            // Dispatch: track loaded, not playing yet
+            dispatch3DSync(data, false);
          }
          if (event === 'userFileLoaded') {
             setUserTrackBuffer(data);
@@ -42,13 +54,19 @@ export function useAudioEngine() {
          // Sync local state with engine events
          if (event === 'userLoop') setUserLoopState(data);
          if (event === 'recordLoop') setRecordLoopState(data);
-         // Per-track playback state
-         if (event === 'userPlay') setIsUserPlaying(data);
-         if (event === 'recordPlay') setIsRecordPlaying(data);
+         // Per-track playback state + 3D sync
+         if (event === 'userPlay') {
+            setIsUserPlaying(data);
+            dispatch3DSync(currentAudioUrl, data);
+         }
+         if (event === 'recordPlay') {
+            setIsRecordPlaying(data);
+            dispatch3DSync(currentAudioUrl, data);
+         }
       });
 
       return () => unsubscribe();
-   }, []);
+   }, [dispatch3DSync, currentAudioUrl]);
 
    const init = useCallback(async () => {
       await audioEngine.init();

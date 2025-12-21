@@ -18,19 +18,23 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
-      input: './src/main.jsx',
+      input: 'src/main.jsx',
+      external: ['react', 'react-dom'],
       output: {
+        format: 'iife',
         entryFileNames: 'bundle.js',
-
-        assetFileNames: (assetInfo) => {
-          if (assetInfo.name.endsWith('.css')) {
-            return 'style.css'
-          }
-           return 'assets/[name][extname]'
-        },
-        format: 'es' 
-      }
-    }
+        assetFileNames: 'assets/[name].[ext]',
+        globals: {
+          react: 'React',
+          'react-dom': 'ReactDOM'
+        }
+      },
+    },
+    cssCodeSplit: false,
+    minify: 'esbuild',
+  },
+  esbuild: {
+    drop: ['console', 'debugger'],
   },
 })
 

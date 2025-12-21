@@ -10,6 +10,7 @@ import { audioEngine } from './engine/AudioEngine';
 function App({ debugMode, samples }) {
    const [isSubmissionOpen, setIsSubmissionOpen] = useState(false);
    const [submissionBlob, setSubmissionBlob] = useState(null);
+   const [isProcessing, setIsProcessing] = useState(false);
 
    // Hint State
    const [activeHintIndex, setActiveHintIndex] = useState(0);
@@ -42,17 +43,28 @@ function App({ debugMode, samples }) {
 
 
    const handleOpenSubmission = async () => {
-      console.log("[App] Submit Button Triggered");
-      // 1. Generate Mix
-      const blob = await audioEngine.exportMix();
-      if (blob) {
-         console.log("[App] Mix successful, opening sidebar");
-         setSubmissionBlob(blob);
-         setIsSubmissionOpen(true);
-      } else {
-         console.warn("[App] Mix failed or duration was 0");
-         alert("Please record or upload something first!");
-      }
+
+      // Stop all playback and recording before exporting
+      audioEngine.stopPlayback();
+      audioEngine.stopRecording();
+
+      setIsProcessing(true);
+
+      // Use setTimeout to let UI update before heavy processing
+      setTimeout(async () => {
+         try {
+            const blob = await audioEngine.exportMix();
+            if (blob) {
+               setSubmissionBlob(blob);
+               setIsSubmissionOpen(true);
+            } else {
+               console.warn("[App] Mix failed or duration was 0");
+               alert("Please record or upload something first!");
+            }
+         } finally {
+            setIsProcessing(false);
+         }
+      }, 100);
    };
 
    // Hint Navigation
@@ -88,6 +100,7 @@ function App({ debugMode, samples }) {
             <ControlsRight
                onSubmit={handleOpenSubmission}
                activeHintTarget={activeTarget}
+               isProcessing={isProcessing}
             />
          </div>
          {debugMode && <DebugLatency />}
