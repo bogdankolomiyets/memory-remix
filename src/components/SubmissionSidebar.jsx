@@ -130,12 +130,11 @@ const SubmissionSidebar = ({ isOpen, onClose, audioBlob }) => {
                      />
                   </div>
 
-                  {/* 4. Drop Zone (Visual Only as per mix logic) */}
+                  {/* 4. Audio Status */}
                   <div className="file-drop-zone">
-                     <h3>Drop Your File Here</h3>
-                     <p>.MP3 OR .WAV ONLY</p>
+                     <h3>{audioBlob ? "✓ Audio Ready" : "No Audio"}</h3>
                      <p className="file-status">
-                        {audioBlob ? "Mixed Audio Ready" : "No Audio Generated"}
+                        {audioBlob ? "Your mix is ready to submit" : "Generate a mix first"}
                      </p>
                   </div>
 
