@@ -19,15 +19,10 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: 'src/main.jsx',
-      external: ['react', 'react-dom'],
       output: {
         format: 'iife',
         entryFileNames: 'bundle.js',
         assetFileNames: 'assets/[name].[ext]',
-        globals: {
-          react: 'React',
-          'react-dom': 'ReactDOM'
-        }
       },
     },
     cssCodeSplit: false,

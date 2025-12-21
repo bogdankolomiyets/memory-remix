@@ -2,7 +2,7 @@
 
 ## Overview
 
-Memory Remix is a React-based audio recording and mixing widget that allows users to:
+Memory Remix is an audio recording and mixing widget that allows users to:
 - Upload audio tracks (MP3/WAV)
 - Record voice over the track
 - Add drum beats (kick, snare, hi-hat) with metronome
@@ -17,26 +17,15 @@ Upload these files to your Webflow project or CDN:
 
 | File | Location | Description |
 |------|----------|-------------|
-| `dist/bundle.js` | `/dist/bundle.js` | Main widget code (~569KB) |
+| `dist/bundle.js` | `/dist/bundle.js` | Main widget code (~580KB, includes React) |
 | `dist/assets/style.css` | `/dist/assets/style.css` | Widget styles (~20KB) |
 | `assets/samples/*.mp3` | `/assets/samples/` | Drum samples (kick, snare, hihat) |
 
 ---
 
-## HTML Integration
+## Quick Start (2 Steps)
 
-### 1. Add Dependencies (in `<head>` or before `</body>`)
-
-```html
-<!-- React 18 (required, must load BEFORE bundle.js) -->
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-
-<!-- Widget Styles -->
-<link href="./dist/assets/style.css" rel="stylesheet" type="text/css">
-```
-
-### 2. Add Mount Container
+### Step 1: Add Container
 
 Place this `<div>` where you want the widget to appear:
 
@@ -46,15 +35,22 @@ Place this `<div>` where you want the widget to appear:
   data-kick-url="./assets/samples/TR-808_Kick.mp3"
   data-snare-url="./assets/samples/TR-808_Snare.mp3"
   data-hihat-url="./assets/samples/TR-808_HiHat.mp3"
-  data-debug="false"
 ></div>
 ```
 
-### 3. Load Widget Script (AFTER React)
+### Step 2: Add Scripts
+
+Add these to your page (in `<head>` or before `</body>`):
 
 ```html
+<!-- Widget Styles -->
+<link href="./dist/assets/style.css" rel="stylesheet">
+
+<!-- Widget (includes React, just ONE script!) -->
 <script src="./dist/bundle.js"></script>
 ```
+
+**That's it!** The widget will automatically mount to `#memory-remix`.
 
 ---
 
@@ -78,8 +74,6 @@ Place this `<div>` where you want the widget to appear:
 <head>
   <meta charset="UTF-8">
   <title>Memory Remix</title>
-  
-  <!-- Widget Styles -->
   <link href="./dist/assets/style.css" rel="stylesheet">
 </head>
 <body>
@@ -92,11 +86,7 @@ Place this `<div>` where you want the widget to appear:
     data-hihat-url="https://your-cdn.com/samples/hihat.mp3"
   ></div>
 
-  <!-- Dependencies -->
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  
-  <!-- Widget -->
+  <!-- Widget Script (includes React) -->
   <script src="./dist/bundle.js"></script>
 
 </body>
@@ -107,9 +97,7 @@ Place this `<div>` where you want the widget to appear:
 
 ## Webflow-Specific Notes
 
-### Script Loading Order
-
-In Webflow's custom code section, ensure this order:
+### Custom Code Setup
 
 1. **Head Code** (Project Settings → Custom Code → Head):
 ```html
@@ -118,8 +106,6 @@ In Webflow's custom code section, ensure this order:
 
 2. **Footer Code** (Project Settings → Custom Code → Footer):
 ```html
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="./dist/bundle.js"></script>
 ```
 
@@ -178,7 +164,7 @@ Submissions are stored in:
 
 ### Widget Not Appearing
 1. Check if `#memory-remix` div exists in DOM
-2. Verify React scripts load BEFORE bundle.js
+2. Verify bundle.js is loaded
 3. Check browser console for errors
 
 ### Audio Not Playing
