@@ -18,19 +18,13 @@ export default defineConfig({
     outDir: 'dist',
     emptyOutDir: true,
     rollupOptions: {
-      input: './src/main.jsx',
+      input: 'src/main.jsx',
       output: {
         entryFileNames: 'bundle.js',
-
-        assetFileNames: (assetInfo) => {
-          if (assetInfo.name.endsWith('.css')) {
-            return 'style.css'
-          }
-           return 'assets/[name][extname]'
-        },
-        format: 'es' 
-      }
-    }
+        assetFileNames: 'assets/[name].[ext]',
+      },
+    },
+    cssCodeSplit: false,
   },
 })
 

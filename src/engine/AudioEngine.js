@@ -1,3 +1,5 @@
+import lamejs from '@breezystack/lamejs';
+
 class AudioEngine {
    constructor() {
       // 1. Context
@@ -77,8 +79,10 @@ class AudioEngine {
       this.userTrackBuffer = null; // New: For uploaded files
       this.recordedSequence = []; // [{type: 'kick', time: 1.2}, ...]
       this.recordingStartTime = 0;
-      this.recordingStartTime = 0;
-      this.sequenceDelay = 0.085; // Default delay: 85ms
+      this.recordingOffset = 0; // Offset relative to user track playback
+      this.userPlaybackStartTime = 0; // When user track started playing
+      this.sequenceDelay = 0.085; // Default delay: 85ms for drums
+      this.micLatencyOffset = -0.080; // Mic/driver latency compensation: -80ms
       this.isLooping = false;
       this.playbackSource = null; // Voice
       this.userPlaybackSource = null; // Uploaded Track
@@ -99,6 +103,8 @@ class AudioEngine {
       if (this.ctx.state === 'suspended') {
          await this.ctx.resume();
       }
+      // Generate synthetic drum samples if not loaded from external files
+      this.generateSynthSamples();
    }
 
    async loadSample(name, url) {
@@ -129,6 +135,76 @@ class AudioEngine {
       }
    }
 
+   // Generate synthetic drum samples as AudioBuffers (for export)
+   generateSynthSamples() {
+      // Only generate if not already loaded from external files
+      if (!this.sampleBuffers.kick) {
+         this.sampleBuffers.kick = this.generateKickBuffer();
+      }
+      if (!this.sampleBuffers.snare) {
+         this.sampleBuffers.snare = this.generateSnareBuffer();
+      }
+      if (!this.sampleBuffers.hihat) {
+         this.sampleBuffers.hihat = this.generateHiHatBuffer();
+      }
+   }
+
+   generateKickBuffer() {
+      const duration = 0.5;
+      const sampleRate = this.ctx.sampleRate;
+      const length = sampleRate * duration;
+      const buffer = this.ctx.createBuffer(1, length, sampleRate);
+      const data = buffer.getChannelData(0);
+
+      for (let i = 0; i < length; i++) {
+         const t = i / sampleRate;
+         // Exponential frequency sweep from 150Hz to near 0
+         const freq = 150 * Math.exp(-t * 10);
+         // Exponential amplitude decay
+         const amp = Math.exp(-t * 8);
+         data[i] = Math.sin(2 * Math.PI * freq * t) * amp;
+      }
+      return buffer;
+   }
+
+   generateSnareBuffer() {
+      const duration = 0.2;
+      const sampleRate = this.ctx.sampleRate;
+      const length = sampleRate * duration;
+      const buffer = this.ctx.createBuffer(1, length, sampleRate);
+      const data = buffer.getChannelData(0);
+
+      for (let i = 0; i < length; i++) {
+         const t = i / sampleRate;
+         // White noise with envelope
+         const noise = (Math.random() * 2 - 1);
+         // Tone component
+         const tone = Math.sin(2 * Math.PI * 180 * t);
+         // Envelope
+         const env = Math.exp(-t * 20);
+         data[i] = (noise * 0.8 + tone * 0.2) * env;
+      }
+      return buffer;
+   }
+
+   generateHiHatBuffer() {
+      const duration = 0.08;
+      const sampleRate = this.ctx.sampleRate;
+      const length = sampleRate * duration;
+      const buffer = this.ctx.createBuffer(1, length, sampleRate);
+      const data = buffer.getChannelData(0);
+
+      for (let i = 0; i < length; i++) {
+         const t = i / sampleRate;
+         // High-passed white noise
+         const noise = (Math.random() * 2 - 1);
+         // Very fast envelope
+         const env = Math.exp(-t * 50) * 0.3;
+         data[i] = noise * env;
+      }
+      return buffer;
+   }
+
    subscribe(cb) {
       this.listeners.add(cb);
       return () => this.listeners.delete(cb);
@@ -136,6 +212,59 @@ class AudioEngine {
 
    emit(event, data) {
       this.listeners.forEach(cb => cb(event, data));
+   }
+
+   // Normalize audio buffer to target peak level (0.0 - 1.0)
+   normalizeBuffer(buffer, targetPeak = 0.8) {
+      // Find the peak amplitude across all channels
+      let maxAmplitude = 0;
+      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+         const channelData = buffer.getChannelData(ch);
+         for (let i = 0; i < channelData.length; i++) {
+            const abs = Math.abs(channelData[i]);
+            if (abs > maxAmplitude) maxAmplitude = abs;
+         }
+      }
+
+      // If audio is silent or already loud enough, skip
+      if (maxAmplitude === 0) {
+         console.log("[AudioEngine] Normalization skipped: silent audio");
+         return buffer;
+      }
+
+      // Calculate gain needed
+      let gain = targetPeak / maxAmplitude;
+
+      // Limit max gain to prevent noise amplification
+      const maxGain = 5.0;
+      if (gain > maxGain) {
+         console.log(`[AudioEngine] Limiting gain from ${gain.toFixed(2)}x to ${maxGain}x to prevent noise`);
+         gain = maxGain;
+      }
+
+      // Don't reduce volume, only boost if needed
+      if (gain <= 1.0) {
+         console.log(`[AudioEngine] Normalization skipped: peak already at ${(maxAmplitude * 100).toFixed(1)}%`);
+         return buffer;
+      }
+
+      // Create a new buffer with normalized audio
+      const normalizedBuffer = this.ctx.createBuffer(
+         buffer.numberOfChannels,
+         buffer.length,
+         buffer.sampleRate
+      );
+
+      for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
+         const inputData = buffer.getChannelData(ch);
+         const outputData = normalizedBuffer.getChannelData(ch);
+         for (let i = 0; i < inputData.length; i++) {
+            outputData[i] = inputData[i] * gain;
+         }
+      }
+
+      console.log(`[AudioEngine] Normalized: ${(maxAmplitude * 100).toFixed(1)}% → ${(targetPeak * 100).toFixed(0)}% (gain: ${gain.toFixed(2)}x)`);
+      return normalizedBuffer;
    }
 
    // --- Sliders (Legacy) ---
@@ -149,7 +278,14 @@ class AudioEngine {
 
    setRecordVolume(val) {
       this.recordVolume = val;
+      // Apply to voice (masterGain) - direct value
       this.masterGain.gain.setTargetAtTime(val, this.ctx.currentTime, 0.01);
+      // Apply to user track (background) proportionally: userVolume * recordVolume
+      // This maintains the ratio set on Track 1 while allowing Track 2 to adjust overall mix
+      if (this.isRecordPlaying) {
+         const proportionalBgVolume = this.userVolume * val;
+         this.userGain.gain.setTargetAtTime(proportionalBgVolume, this.ctx.currentTime, 0.01);
+      }
    }
 
    setUserPitch(val) {
@@ -161,9 +297,15 @@ class AudioEngine {
 
    setRecordPitch(val) {
       this.recordPitch = val;
-      // Voice
+      // Apply to voice - direct value
       if (this.playbackSource && this.playbackSource.playbackRate) {
          this.playbackSource.playbackRate.value = val;
+      }
+      // Apply to user track (background) proportionally: userPitch * recordPitch
+      // This maintains the relative pitch set on Track 1
+      if (this.isRecordPlaying && this.userPlaybackSource && this.userPlaybackSource.playbackRate) {
+         const proportionalBgPitch = this.userPitch * val;
+         this.userPlaybackSource.playbackRate.value = proportionalBgPitch;
       }
    }
 
@@ -418,8 +560,12 @@ class AudioEngine {
          try {
             const arrayBuffer = await blob.arrayBuffer();
             // Decode can fail if the format isn't fully supported by Web Audio API (even if MediaRecorder supports it)
-            this.recordedBuffer = await this.ctx.decodeAudioData(arrayBuffer);
-            console.log("Audio Successfully Decoded. Buffer Duration:", this.recordedBuffer.duration);
+            const decodedBuffer = await this.ctx.decodeAudioData(arrayBuffer);
+            console.log("Audio Successfully Decoded. Buffer Duration:", decodedBuffer.duration);
+
+            // Normalize the recorded audio to ensure it's audible
+            this.recordedBuffer = this.normalizeBuffer(decodedBuffer, 0.8);
+
             this.emit('recordingComplete', url);
          } catch (err) {
             console.error("Decoding Failed. The browser might support recording this format but not decoding it via Web Audio API.", err);
@@ -434,6 +580,15 @@ class AudioEngine {
       this.audioChunks = [];
       this.recordedSequence = [];
       this.recordingStartTime = this.ctx.currentTime;
+
+      // Calculate offset relative to user track playback
+      if (this.isUserPlaying && this.userPlaybackStartTime > 0) {
+         // How far into the user track we started recording
+         this.recordingOffset = (this.ctx.currentTime - this.userPlaybackStartTime) * this.userPitch;
+         console.log(`[AudioEngine] Recording offset: ${this.recordingOffset.toFixed(2)}s into user track`);
+      } else {
+         this.recordingOffset = 0;
+      }
 
       // We also start the scheduler if not running, to keep time
       if (!this.timerID) this.startScheduler();
@@ -537,6 +692,11 @@ class AudioEngine {
          return;
       }
 
+      // Stop Track 2 if playing (mutual exclusion)
+      if (this.isRecordPlaying) {
+         this.stopRecordPlayback();
+      }
+
       if (this.isUserPlaying) {
          this.stopUserPlayback();
          return;
@@ -553,11 +713,13 @@ class AudioEngine {
                startUserTrack();
             } else {
                this.isUserPlaying = false;
+               this.userPlaybackStartTime = 0;
                this.emit('userPlay', false);
             }
          };
 
          this.userPlaybackSource.start();
+         this.userPlaybackStartTime = this.ctx.currentTime; // Track when playback started
       };
 
       startUserTrack();
@@ -572,14 +734,21 @@ class AudioEngine {
          this.userPlaybackSource = null;
       }
       this.isUserPlaying = false;
+      this.userPlaybackStartTime = 0;
       this.emit('userPlay', false);
    }
 
-   // --- Track 2: Recording + Drums ---
+   // --- Track 2: FULL MIX (User Track + Recording + Drums) ---
    playRecordTrackOnly() {
-      if (!this.recordedBuffer && this.recordedSequence.length === 0) {
-         console.warn("No recording to play");
+      // If nothing to play, warn
+      if (!this.recordedBuffer && this.recordedSequence.length === 0 && !this.userTrackBuffer) {
+         console.warn("No recording or user track to play");
          return;
+      }
+
+      // Stop Track 1 if playing (mutual exclusion)
+      if (this.isUserPlaying) {
+         this.stopUserPlayback();
       }
 
       if (this.isRecordPlaying) {
@@ -587,53 +756,89 @@ class AudioEngine {
          return;
       }
 
-      const startRecordTrack = () => {
-         // 1. Drums
+      const startFullMix = () => {
+         // Clear previous timeouts
          this.playbackTimeouts.forEach(t => clearTimeout(t));
          this.playbackTimeouts = [];
 
-         this.recordedSequence.forEach(event => {
-            const timeout = setTimeout(() => {
-               if (this.isRecordPlaying) {
-                  if (event.type === 'kick') this.triggerKick();
-                  else if (event.type === 'snare') this.triggerSnare();
-                  else if (event.type === 'hihat') this.triggerHiHat();
-               }
-            }, (event.time / this.recordPitch + this.sequenceDelay) * 1000);
-            this.playbackTimeouts.push(timeout);
-         });
+         // Calculate proportional values upfront
+         const proportionalBgVolume = this.userVolume * this.recordVolume;
+         const proportionalBgPitch = this.userPitch * this.recordPitch;
 
-         // 2. Voice
+         // A. User Track (Background) - starts at 0
+         if (this.userTrackBuffer) {
+            // Set proportional background volume before playback
+            this.userGain.gain.setTargetAtTime(proportionalBgVolume, this.ctx.currentTime, 0.01);
+
+            this.userPlaybackSource = this.ctx.createBufferSource();
+            this.userPlaybackSource.buffer = this.userTrackBuffer;
+            this.userPlaybackSource.playbackRate.value = proportionalBgPitch;
+            this.userPlaybackSource.connect(this.userGain);
+            this.userPlaybackSource.start();
+         }
+
+         // B. Voice - starts at recordingOffset (relative to user track)
          if (this.recordedBuffer) {
             this.playbackSource = this.ctx.createBufferSource();
             this.playbackSource.buffer = this.recordedBuffer;
             this.playbackSource.playbackRate.value = this.recordPitch;
             this.playbackSource.connect(this.masterGain);
 
+            // Calculate when to start: offset is in "original" bg timeline
+            // Background plays at proportionalBgPitch, so divide offset by that
+            // Add micLatencyOffset to compensate for recording latency (-80ms = earlier)
+            const voiceStartDelay = Math.max(0, (this.recordingOffset / proportionalBgPitch) + this.micLatencyOffset);
+            this.playbackSource.start(this.ctx.currentTime + voiceStartDelay);
+
             this.playbackSource.onended = () => {
                if (this.isRecordPlaying && this.recordLoop) {
-                  startRecordTrack();
-               } else {
-                  this.isRecordPlaying = false;
-                  this.emit('recordPlay', false);
+                  startFullMix();
+               } else if (!this.recordLoop) {
+                  // Check if user track also finished
+                  // For now, just emit stop when voice ends
                }
             };
+         }
 
-            this.playbackSource.start();
+         // C. Drums - offset by recordingOffset + their internal time
+         if (this.recordedSequence.length > 0) {
+            // Same latency compensation for drums
+            const voiceStartDelay = Math.max(0, (this.recordingOffset / proportionalBgPitch) + this.micLatencyOffset);
+
+            this.recordedSequence.forEach(event => {
+               const drumTime = voiceStartDelay + (event.time / this.recordPitch) + this.sequenceDelay;
+               const timeout = setTimeout(() => {
+                  if (this.isRecordPlaying) {
+                     if (event.type === 'kick') this.triggerKick();
+                     else if (event.type === 'snare') this.triggerSnare();
+                     else if (event.type === 'hihat') this.triggerHiHat();
+                  }
+               }, drumTime * 1000);
+               this.playbackTimeouts.push(timeout);
+            });
          }
       };
 
-      startRecordTrack();
+      startFullMix();
       this.isRecordPlaying = true;
       this.emit('recordPlay', true);
    }
 
    stopRecordPlayback() {
+      // Stop voice
       if (this.playbackSource) {
          this.playbackSource.onended = null;
          try { this.playbackSource.stop(); } catch (e) { }
          this.playbackSource = null;
       }
+
+      // Stop user track (background) that plays during full mix
+      if (this.userPlaybackSource) {
+         this.userPlaybackSource.onended = null;
+         try { this.userPlaybackSource.stop(); } catch (e) { }
+         this.userPlaybackSource = null;
+      }
+
       // Clear sequencer timeouts
       this.playbackTimeouts.forEach(t => clearTimeout(t));
       this.playbackTimeouts = [];
@@ -697,21 +902,30 @@ class AudioEngine {
    async exportMix() {
       console.log("[AudioEngine] Starting Export Mix...");
 
+      // Calculate proportional background pitch first
+      const proportionalBgPitch = this.userPitch * this.recordPitch;
+
+      // Calculate voice/drum offset - divide by proportionalBgPitch since that's how bg plays
+      // Add micLatencyOffset to compensate for recording latency (-80ms = earlier)
+      const voiceStartOffset = Math.max(0, (this.recordingOffset / proportionalBgPitch) + this.micLatencyOffset);
+
       // 1. Calculate Duration
       let duration = 0;
       if (this.userTrackBuffer) {
-         duration = Math.max(duration, this.userTrackBuffer.duration / this.userPitch);
+         // Background uses proportional pitch
+         duration = Math.max(duration, this.userTrackBuffer.duration / proportionalBgPitch);
       }
       if (this.recordedBuffer) {
-         duration = Math.max(duration, this.recordedBuffer.duration / this.recordPitch);
+         // Voice duration + its offset
+         duration = Math.max(duration, voiceStartOffset + (this.recordedBuffer.duration / this.recordPitch));
       }
       if (this.recordedSequence.length > 0) {
          const lastEvent = this.recordedSequence[this.recordedSequence.length - 1];
-         const seqDuration = (lastEvent.time / this.recordPitch) + 2.0;
+         const seqDuration = voiceStartOffset + (lastEvent.time / this.recordPitch) + this.sequenceDelay + 2.0;
          duration = Math.max(duration, seqDuration);
       }
 
-      console.log(`[AudioEngine] Mix Duration: ${duration}s`);
+      console.log(`[AudioEngine] Mix Duration: ${duration}s (voice offset: ${voiceStartOffset.toFixed(2)}s)`);
 
       if (duration === 0) {
          console.warn("[AudioEngine] Nothing to export (duration 0).");
@@ -727,20 +941,21 @@ class AudioEngine {
       offlineMaster.gain.value = 1.0;
       offlineMaster.connect(offlineCtx.destination);
 
-      // B. User Track
+      // B. User Track - starts at 0, proportional volume and pitch
       if (this.userTrackBuffer) {
+         const proportionalBgPitch = this.userPitch * this.recordPitch;
          const userSource = offlineCtx.createBufferSource();
          userSource.buffer = this.userTrackBuffer;
-         userSource.playbackRate.value = this.userPitch;
+         userSource.playbackRate.value = proportionalBgPitch; // Proportional pitch
          const userGain = offlineCtx.createGain();
-         userGain.gain.value = this.userVolume;
+         userGain.gain.value = this.userVolume * this.recordVolume; // Proportional volume
          userSource.connect(userGain);
          userGain.connect(offlineMaster);
          userSource.start(0);
-         console.log("[AudioEngine] Joined Track 1 to mix");
+         console.log(`[AudioEngine] Joined Track 1 to mix (vol: ${(this.userVolume * this.recordVolume * 100).toFixed(0)}%, pitch: ${proportionalBgPitch.toFixed(2)}x)`);
       }
 
-      // C. Recorder Track
+      // C. Recorder Track (Voice) - starts at voiceStartOffset
       if (this.recordedBuffer) {
          const recSource = offlineCtx.createBufferSource();
          recSource.buffer = this.recordedBuffer;
@@ -749,14 +964,14 @@ class AudioEngine {
          recGain.gain.value = this.recordVolume;
          recSource.connect(recGain);
          recGain.connect(offlineMaster);
-         recSource.start(0);
-         console.log("[AudioEngine] Joined Track 2 (Voice) to mix");
+         recSource.start(voiceStartOffset);
+         console.log(`[AudioEngine] Joined Track 2 (Voice) to mix (starts at ${voiceStartOffset.toFixed(2)}s)`);
       }
 
-      // D. Drums
+      // D. Drums - offset by voiceStartOffset + their internal time
       if (this.recordedSequence.length > 0) {
          this.recordedSequence.forEach(event => {
-            const time = (event.time / this.recordPitch) + this.sequenceDelay;
+            const time = voiceStartOffset + (event.time / this.recordPitch) + this.sequenceDelay;
             if (time >= duration) return;
 
             let buffer = null;
@@ -781,18 +996,109 @@ class AudioEngine {
       // 4. Render
       try {
          const renderedBuffer = await offlineCtx.startRendering();
-         console.log("[AudioEngine] Rendering Complete. Encoding WAV...");
+         console.log("[AudioEngine] Rendering Complete. Encoding MP3...");
 
-         const wavBlob = this.internalBufferToWav(renderedBuffer);
-         console.log(`[AudioEngine] Mix Exported. Size: ${wavBlob.size} bytes`);
-         return wavBlob;
+         try {
+            const mp3Blob = this.internalBufferToMp3(renderedBuffer);
+            console.log(`[AudioEngine] Mix Exported as MP3. Size: ${mp3Blob.size} bytes`);
+            return mp3Blob;
+         } catch (mp3Err) {
+            console.warn("[AudioEngine] MP3 encoding failed, falling back to WAV:", mp3Err);
+            const wavBlob = this.internalBufferToWav(renderedBuffer);
+            console.log(`[AudioEngine] Mix Exported as WAV (fallback). Size: ${wavBlob.size} bytes`);
+            return wavBlob;
+         }
       } catch (err) {
          console.error("[AudioEngine] Export Failed:", err);
          return null;
       }
    }
 
-   // Inline WAV encoder for reliability
+   // MP3 encoder using lamejs
+   internalBufferToMp3(buffer) {
+      const numChannels = buffer.numberOfChannels;
+      const sampleRate = buffer.sampleRate;
+      const kbps = 128;
+
+      console.log(`[AudioEngine] MP3 encoding: ${numChannels}ch, ${sampleRate}Hz, ${kbps}kbps, ${buffer.length} samples`);
+
+      // Get channel data
+      const left = buffer.getChannelData(0);
+      const right = numChannels > 1 ? buffer.getChannelData(1) : left;
+      console.log(`[AudioEngine] Got channel data, left length: ${left.length}`);
+
+      // Convert float32 to int16
+      console.log(`[AudioEngine] Converting to Int16...`);
+      const leftInt16 = new Int16Array(left.length);
+      const rightInt16 = new Int16Array(right.length);
+
+      for (let i = 0; i < left.length; i++) {
+         leftInt16[i] = Math.max(-32768, Math.min(32767, Math.floor(left[i] * 32767)));
+         rightInt16[i] = Math.max(-32768, Math.min(32767, Math.floor(right[i] * 32767)));
+      }
+      console.log(`[AudioEngine] Conversion complete`);
+
+      // Create MP3 encoder
+      const lameLib = lamejs.default || lamejs;
+      console.log(`[AudioEngine] Creating Mp3Encoder...`);
+
+      let mp3encoder;
+      try {
+         mp3encoder = new lameLib.Mp3Encoder(numChannels, sampleRate, kbps);
+         console.log(`[AudioEngine] Mp3Encoder created successfully`);
+      } catch (e) {
+         console.error(`[AudioEngine] Failed to create Mp3Encoder:`, e);
+         throw e;
+      }
+
+      const mp3Data = [];
+
+      // Encode in chunks with timeout check
+      const sampleBlockSize = 1152;
+      const totalChunks = Math.ceil(leftInt16.length / sampleBlockSize);
+      const startTime = Date.now();
+      const timeoutMs = 60000; // 60 seconds timeout
+
+      console.log(`[AudioEngine] Encoding ${totalChunks} chunks...`);
+
+      for (let i = 0; i < leftInt16.length; i += sampleBlockSize) {
+         // Check timeout every 1000 chunks
+         if (i % (sampleBlockSize * 1000) === 0) {
+            const elapsed = Date.now() - startTime;
+            if (elapsed > timeoutMs) {
+               console.warn(`[AudioEngine] MP3 encoding timeout after ${(elapsed / 1000).toFixed(1)}s`);
+               throw new Error('MP3 encoding timeout - falling back to WAV');
+            }
+         }
+
+         const leftChunk = leftInt16.subarray(i, i + sampleBlockSize);
+         const rightChunk = rightInt16.subarray(i, i + sampleBlockSize);
+
+         let mp3buf;
+         if (numChannels === 1) {
+            mp3buf = mp3encoder.encodeBuffer(leftChunk);
+         } else {
+            mp3buf = mp3encoder.encodeBuffer(leftChunk, rightChunk);
+         }
+
+         if (mp3buf.length > 0) {
+            mp3Data.push(mp3buf);
+         }
+      }
+
+      // Flush remaining data
+      console.log(`[AudioEngine] Flushing...`);
+      const mp3end = mp3encoder.flush();
+      if (mp3end.length > 0) {
+         mp3Data.push(mp3end);
+      }
+
+      const totalTime = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`[AudioEngine] MP3 encoding complete. ${mp3Data.length} chunks in ${totalTime}s`);
+      return new Blob(mp3Data, { type: 'audio/mp3' });
+   }
+
+   // Fallback WAV encoder
    internalBufferToWav(buffer) {
       const numOfChan = buffer.numberOfChannels;
       const length = buffer.length * numOfChan * 2 + 44;
@@ -801,7 +1107,6 @@ class AudioEngine {
       const channels = [];
       let i, sample, offset = 0, pos = 0;
 
-      // Write Header
       const setUint32 = (data) => { view.setUint32(pos, data, true); pos += 4; };
       const setUint16 = (data) => { view.setUint16(pos, data, true); pos += 2; };
       const writeString = (s) => { for (let j = 0; j < s.length; j++) view.setUint8(pos++, s.charCodeAt(j)); };

@@ -32,7 +32,6 @@ const initPlayer = () => {
         <App debugMode={debugMode} samples={samples} />
       </StrictMode>,
     )
-    console.log(`[Memory Remix] Widget mounted successfully on #${MOUNT_ID}`);
     return true;
   }
 }
