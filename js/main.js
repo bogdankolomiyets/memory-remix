@@ -874,28 +874,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
 //======API Integration=======//
 document.addEventListener("DOMContentLoaded", async function () {
-  // Initialize Supabase client from centralized module
-  let supabase;
-  try {
-    // Try to import from the centralized supabaseClient module
-    const { supabase: supabaseClient } = await import('../src/lib/supabaseClient.js');
-    supabase = supabaseClient;
-    console.log("Using centralized Supabase client");
-  } catch (err) {
-    console.error("Failed to import centralized Supabase client:", err);
-    
-    // Fallback: try to create client directly
-    try {
-      const { createClient } = await import('@supabase/supabase-js');
-      supabase = createClient(
-        'https://coumlezydpfpsbsjlail.supabase.co',
-        'sb_publishable_Jl4vSwXaADYk-Irdsrf54g_KZJyk8w4'
-      );
-      console.log("Using fallback Supabase client");
-    } catch (fallbackErr) {
-      console.error("Supabase not available:", fallbackErr);
-    }
-  }
+  // Supabase REST API configuration
+  const SUPABASE_URL = "https://coumlezydpfpsbsjlail.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_Jl4vSwXaADYk-Irdsrf54g_KZJyk8w4";
 
   const wrapper = document.querySelector(".memory-cards-list-wrapper");
 
@@ -971,38 +952,32 @@ document.addEventListener("DOMContentLoaded", async function () {
     }
   }
 
-  // Fetch memories from Supabase
+  // Fetch memories from Supabase REST API
   async function loadMemories() {
     try {
-      if (supabase) {
-        // Use Supabase client
-        const { data, error } = await supabase
-          .from('memories')
-          .select('*')
-          .eq('status', 'approved'); // Filter for approved records only
+      console.log("Fetching memories from Supabase...");
+      
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/memories?status=eq.approved&select=*`, {
+        method: 'GET',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        }
+      });
 
-        if (error) throw error;
-        
-        console.log("Loaded memories from Supabase:", data?.length || 0);
-        renderCards(data || []);
-      } else {
-        // Fallback to REST API if Supabase client not available
-        const response = await fetch(`https://coumlezydpfpsbsjlail.supabase.co/rest/v1/memories?status=eq.approved&select=*`, {
-          headers: {
-            'apikey': 'sb_publishable_Jl4vSwXaADYk-Irdsrf54g_KZJyk8w4',
-            'Authorization': `Bearer sb_publishable_Jl4vSwXaADYk-Irdsrf54g_KZJyk8w4`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (!response.ok) throw new Error("Network response was not ok");
-        
-        const data = await response.json();
-        console.log("Loaded memories from Supabase REST:", data?.length || 0);
-        renderCards(data || []);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
+      
+      const data = await response.json();
+      console.log("Loaded memories from Supabase:", data?.length || 0, data);
+      renderCards(data || []);
+      
     } catch (err) {
       console.error("Memory Library fetch error:", err);
+      console.log("Rendering empty cards as fallback");
       // Show empty state or fallback UI
       renderCards([]);
     }
