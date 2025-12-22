@@ -873,15 +873,35 @@ document.addEventListener("DOMContentLoaded", () => {
 })();
 
 //======API Integration=======//
-document.addEventListener("DOMContentLoaded", function () {
-  const API_URL =
-    "https://memory-remix-db-4a9fa1972934.herokuapp.com/api/v1/audio_memories";
+document.addEventListener("DOMContentLoaded", async function () {
+  // Initialize Supabase client from centralized module
+  let supabase;
+  try {
+    // Try to import from the centralized supabaseClient module
+    const { supabase: supabaseClient } = await import('../src/lib/supabaseClient.js');
+    supabase = supabaseClient;
+    console.log("Using centralized Supabase client");
+  } catch (err) {
+    console.error("Failed to import centralized Supabase client:", err);
+    
+    // Fallback: try to create client directly
+    try {
+      const { createClient } = await import('@supabase/supabase-js');
+      supabase = createClient(
+        'https://coumlezydpfpsbsjlail.supabase.co',
+        'sb_publishable_Jl4vSwXaADYk-Irdsrf54g_KZJyk8w4'
+      );
+      console.log("Using fallback Supabase client");
+    } catch (fallbackErr) {
+      console.error("Supabase not available:", fallbackErr);
+    }
+  }
 
   const wrapper = document.querySelector(".memory-cards-list-wrapper");
 
   if (!wrapper) {
     console.warn(
-      "Memory Library: не найден wrapper .memory-cards-list-wrapper"
+      "Memory Library: not found .memory-cards-list-wrapper"
     );
     return;
   }
@@ -890,7 +910,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const templateCard = wrapper.querySelector(".memory-card");
 
   if (!templateCard) {
-    console.warn("Memory Library: не найден template .memory-card");
+    console.warn("Memory Library: not found template .memory-card");
     return;
   }
 
@@ -907,7 +927,7 @@ document.addEventListener("DOMContentLoaded", function () {
     memories.forEach((memory) => {
       const card = cardTemplate.cloneNode(true);
 
-      // Populate card with memory data
+      // Populate card with memory data (mapped from Supabase schema)
       const headerEls = Array.from(
         card.querySelectorAll(".memory-card-header")
       );
@@ -915,10 +935,12 @@ document.addEventListener("DOMContentLoaded", function () {
       const playerEl = card.querySelector(".howler-player");
 
       if (headerEls.length) {
-        headerEls.forEach((el) => (el.textContent = memory.memory_name || ""));
+        // Map 'title' field from Supabase to card header
+        headerEls.forEach((el) => (el.textContent = memory.title || ""));
       }
       if (textEls.length) {
-        textEls.forEach((el) => (el.textContent = memory.user_name || ""));
+        // Map 'name' field from Supabase to card text
+        textEls.forEach((el) => (el.textContent = memory.name || ""));
       }
       if (playerEl) {
         playerEl.setAttribute("data-howler-src", memory.audio_url || "");
@@ -949,27 +971,41 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   }
 
-  // Fetch and sort memories from API
-  function loadMemories() {
-    fetch(API_URL, { cache: "no-store" })
-      .then((response) => {
+  // Fetch memories from Supabase
+  async function loadMemories() {
+    try {
+      if (supabase) {
+        // Use Supabase client
+        const { data, error } = await supabase
+          .from('memories')
+          .select('*')
+          .eq('status', 'approved'); // Filter for approved records only
+
+        if (error) throw error;
+        
+        console.log("Loaded memories from Supabase:", data?.length || 0);
+        renderCards(data || []);
+      } else {
+        // Fallback to REST API if Supabase client not available
+        const response = await fetch(`https://coumlezydpfpsbsjlail.supabase.co/rest/v1/memories?status=eq.approved&select=*`, {
+          headers: {
+            'apikey': 'sb_publishable_Jl4vSwXaADYk-Irdsrf54g_KZJyk8w4',
+            'Authorization': `Bearer sb_publishable_Jl4vSwXaADYk-Irdsrf54g_KZJyk8w4`,
+            'Content-Type': 'application/json'
+          }
+        });
+
         if (!response.ok) throw new Error("Network response was not ok");
-        return response.json();
-      })
-      .then((data) => {
-        // Filter for approved records only
-        const approved = data.filter((item) => item.approved);
-
-        // Sort by updated_at (newest first)
-        approved.sort(
-          (a, b) => new Date(b.updated_at) - new Date(a.updated_at)
-        );
-
-        renderCards(approved);
-      })
-      .catch((err) => {
-        console.error("Memory Library fetch error:", err);
-      });
+        
+        const data = await response.json();
+        console.log("Loaded memories from Supabase REST:", data?.length || 0);
+        renderCards(data || []);
+      }
+    } catch (err) {
+      console.error("Memory Library fetch error:", err);
+      // Show empty state or fallback UI
+      renderCards([]);
+    }
   }
 
   // Load memories on page load
