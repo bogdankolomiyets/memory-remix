@@ -239,7 +239,7 @@ const ControlsRight = ({ onSubmit, activeHintTarget, isProcessing }) => {
                   </button>
 
                   {/* Custom SVG arc slider */}
-                  <svg className="radial-ring" width="160" height="160" viewBox="0 0 144 144" style={{ overflow: 'visible' }}>
+                  <svg className="radial-ring" viewBox="0 0 144 144" style={{ overflow: 'visible' }}>
                      {/* Arc track (270 degrees, gap at bottom) */}
                      <path
                         d={arcPath}

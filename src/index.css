@@ -35,8 +35,10 @@ html {
 }
 
 #memory-remix-app {
+   --header-height: 100px;
+   /* Height of the Webflow navigation header */
    width: 100%;
-   height: 100vh;
+   height: calc(100vh - var(--header-height));
    background-color: var(--color-dark-blue);
    color: var(--color-text-light);
    display: flex;
@@ -116,7 +118,8 @@ html {
 
 .btn-label {
    margin-top: 4px;
-   font-size: 0.75rem;
+   font-size: max(0.5rem, 0.625vw);
+   /* 12px/1920 = 0.625vw, no upper limit */
    font-weight: 600;
    text-transform: uppercase;
    letter-spacing: 0.5px;
@@ -147,7 +150,7 @@ html {
 
 /* --- Left Sidebar Container --- */
 .leftSide {
-   height: 90vh;
+   height: 100%;
    width: 30vw;
    display: flex;
    flex-direction: row;
@@ -156,20 +159,23 @@ html {
 
 .controls-left {
    position: relative;
-   width: 160px !important;
-   height: 84%;
+   width: max(90px, 8.33vw) !important;
+   /* 160/1920 = 8.33vw, no upper limit */
+   height: auto;
+   min-height: 84%;
+   max-height: 95%;
    background-color: var(--color-cream);
    color: var(--color-dark-blue);
    display: flex;
    flex-direction: column;
    align-items: center;
    padding: 0;
-   gap: 1.5rem;
+   gap: max(0.5rem, 1vw);
    margin: 10px 0 10px 20px;
    border-radius: 8px;
    flex-shrink: 0;
    z-index: 50;
-   overflow: hidden;
+   overflow: visible;
 }
 
 /* Controls Left - Buttons Override */
@@ -245,15 +251,17 @@ html {
 
 /* Play Button */
 .play-btn {
-   width: 120px;
-   height: 120px;
+   width: max(60px, 6.25vw);
+   /* 120/1920 = 6.25vw, no upper limit */
+   height: max(60px, 6.25vw);
 }
 
 /* Upload/Record Buttons */
 .upload-btn,
 .rec-btn {
-   width: 120px;
-   height: 120px;
+   width: max(60px, 6.25vw);
+   /* 120/1920 = 6.25vw, no upper limit */
+   height: max(60px, 6.25vw);
 }
 
 .rec-icon {
@@ -317,7 +325,8 @@ html {
 }
 
 .slider-label {
-   font-size: 0.6rem;
+   font-size: max(0.4rem, 0.5vw);
+   /* 9.6px/1920 = 0.5vw, no upper limit */
    font-weight: 700;
    color: var(--color-dark-blue);
    letter-spacing: 0.5px;
@@ -345,21 +354,26 @@ html {
 
 .slider-icon-wrapper {
    position: relative;
-   width: 42px;
-   height: 158px;
+   width: max(25px, 2.19vw);
+   /* 42/1920 = 2.19vw, no upper limit */
+   height: max(90px, 8.23vw);
+   /* 158/1920 = 8.23vw, no upper limit */
 }
 
 .slider-icon-svg {
-   width: 42px;
-   height: 158px;
+   width: max(25px, 2.19vw);
+   height: max(90px, 8.23vw);
    display: block;
 }
 
 .slider-handle {
    position: absolute;
-   left: 8px;
-   width: 26px;
-   height: 7px;
+   left: 19%;
+   /* 8/42 ≈ 19% of parent width */
+   width: max(15px, 1.35vw);
+   /* 26/1920 = 1.35vw */
+   height: max(4px, 0.36vw);
+   /* 7/1920 = 0.36vw */
    pointer-events: none;
    z-index: 5;
 }
@@ -372,15 +386,15 @@ html {
    position: absolute;
    top: 0;
    left: 0;
-   width: 158px;
-   height: 42px;
+   width: max(90px, 8.23vw);
+   height: max(25px, 2.19vw);
    -webkit-appearance: none;
    appearance: none;
    background: transparent;
    outline: none;
    transform: rotate(-90deg);
    transform-origin: top left;
-   margin-top: 158px;
+   margin-top: max(90px, 8.23vw);
    cursor: pointer;
    opacity: 0;
    z-index: 10;
@@ -492,8 +506,9 @@ html {
 
 /* Loop Button */
 .loop-btn {
-   width: 120px;
-   height: 120px;
+   width: max(60px, 6.25vw);
+   /* 120/1920 = 6.25vw, no upper limit */
+   height: max(60px, 6.25vw);
    border-radius: 50%;
    display: flex;
    justify-content: center;
@@ -512,7 +527,8 @@ html {
 }
 
 .track-name {
-   font-size: 0.8rem;
+   font-size: max(0.5rem, 0.67vw);
+   /* 12.8px/1920 = 0.67vw, no upper limit */
    text-transform: uppercase;
    letter-spacing: 1px;
    font-weight: 800;
@@ -524,6 +540,7 @@ html {
    width: 100%;
    height: 100%;
    position: relative;
+   overflow: hidden;
 }
 
 .controls-carousel-track {
@@ -549,8 +566,9 @@ html {
    display: flex;
    flex-direction: column;
    align-items: center;
-   padding: 1.5rem 0;
-   gap: 1.5rem;
+   justify-content: space-between;
+   padding: clamp(0.5rem, 1vh, 1.5rem) 0;
+   gap: clamp(0.5rem, 1.5vh, 1.5rem);
    flex-shrink: 0;
 }
 
@@ -582,7 +600,7 @@ html {
 
 /* --- Right Sidebar Container --- */
 .rightSide {
-   height: 90vh;
+   height: 100%;
    width: 20vw;
    display: flex;
    flex-direction: column;
@@ -594,8 +612,11 @@ html {
 
 .controls-right {
    position: relative;
-   width: 160px !important;
-   height: 80% !important;
+   width: max(90px, 8.33vw) !important;
+   /* 160/1920 = 8.33vw, no upper limit */
+   height: auto !important;
+   min-height: 80%;
+   max-height: 95%;
    background: transparent;
    border: 1px solid rgba(255, 255, 255, 0.6);
    border-radius: 5px;
@@ -605,10 +626,10 @@ html {
    flex-direction: column;
    align-items: center;
    align-self: end;
-   gap: 1.5rem;
+   gap: max(0.5rem, 1vw);
    color: var(--color-cream);
    z-index: 50;
-   overflow: hidden;
+   overflow: visible;
 }
 
 /* Right Sidebar - Buttons Override */
@@ -629,8 +650,9 @@ html {
 }
 
 .pad-btn {
-   width: 117px;
-   height: 117px;
+   width: max(55px, 6.1vw);
+   /* 117/1920 = 6.1vw, no upper limit */
+   height: max(55px, 6.1vw);
    border-radius: 50%;
    cursor: pointer;
    display: flex;
@@ -690,7 +712,8 @@ html {
 }
 
 .pad-label {
-   font-size: 0.75rem;
+   font-size: max(0.5rem, 0.625vw);
+   /* 12px/1920 = 0.625vw, no upper limit */
    font-weight: bold;
    text-transform: uppercase;
    letter-spacing: 0.5px;
@@ -711,15 +734,17 @@ html {
    align-items: center;
    position: relative;
    width: 100%;
-   height: 120px;
+   height: max(60px, 6.25vw);
+   /* 120/1920 = 6.25vw, no upper limit */
    justify-content: center;
 }
 
 /* Metronome Dial Container (react-circular-input) */
 .metronome-dial-container {
    position: relative;
-   width: 140px;
-   height: 140px;
+   width: max(70px, 7.29vw);
+   /* 140/1920 = 7.29vw, no upper limit */
+   height: max(70px, 7.29vw);
    display: flex;
    justify-content: center;
    align-items: center;
@@ -761,8 +786,9 @@ html {
 }
 
 .metronome-btn {
-   width: 120px !important;
-   height: 120px !important;
+   width: max(60px, 6.25vw) !important;
+   /* 120/1920 = 6.25vw, no upper limit */
+   height: max(60px, 6.25vw) !important;
    background-color: var(--color-cream) !important;
    color: var(--color-dark-blue) !important;
    border: none;
@@ -818,19 +844,21 @@ html {
 }
 
 .bpm-icon {
-   margin-left: 5px;
+   margin-left: 0.3125rem;
    display: flex;
    justify-content: center;
    align-items: center;
-   width: 38px;
+   width: max(2.375rem, 1.98vw);
+   /* 38/1920 = 1.98vw */
    height: auto;
    overflow: hidden;
    position: relative;
-   bottom: -5px;
+   bottom: -0.3125rem;
 }
 
 .bpm-icon svg {
-   width: 38px;
+   width: max(2.375rem, 1.98vw);
+   /* 38/1920 = 1.98vw */
    height: auto;
    position: relative;
 }
@@ -845,13 +873,14 @@ html {
 }
 
 .bpm-label {
-   font-size: 0.8rem;
+   font-size: max(0.5rem, 0.67vw);
+   /* 12.8px/1920 = 0.67vw, no upper limit */
    font-weight: 300;
-
 }
 
 .bpm-value {
-   font-size: 0.7rem;
+   font-size: max(0.45rem, 0.58vw);
+   /* 11.2px/1920 = 0.58vw, no upper limit */
    font-weight: 500;
 }
 
@@ -862,18 +891,20 @@ html {
    font-weight: 300;
    font-family: var(--font-main);
 }
-.submit-group button{
-   font-weight: 300!important;
-   font-family: var(--font-main)!important;
+
+.submit-group button {
+   font-weight: 300 !important;
+   font-family: var(--font-main) !important;
 }
 
 .submit-btn {
-   width: 120px !important;
-   height: 120px !important;
+   width: max(60px, 6.25vw) !important;
+   /* 120/1920 = 6.25vw, no upper limit */
+   height: max(60px, 6.25vw) !important;
    background: transparent !important;
    border: 1px solid var(--color-cream) !important;
    color: var(--color-cream) !important;
-   font-size: 0.8rem;
+   font-size: max(0.5rem, 0.6vw);
    font-family: var(--font-main);
    font-weight: bold;
    letter-spacing: 1px;
@@ -1224,6 +1255,11 @@ html {
    animation: pulse-glow 2s infinite ease-in-out;
 }
 
+.radial-ring {
+   width: 8.25vw !important;
+   height: 8.25vw !important;
+}
+
 .hint-highlight-box {
    position: relative;
    z-index: 20;
@@ -1304,13 +1340,14 @@ html {
    flex: 1;
    display: flex;
    align-items: flex-start;
-   width: 85%;
+   width: 100%;
+   padding-right: 70px;
 }
 
 .hint-text {
    font-family: var(--font-main);
    font-weight: 600;
-   font-size: 1rem;
+   font-size: clamp(12px, 1.1vw, 16px);
    text-transform: uppercase;
    letter-spacing: 0.5px;
    line-height: 1.5;
@@ -1343,12 +1380,19 @@ html {
    transform: scale(0.9);
 }
 
+.hint-nav-btn.disabled,
+.hint-nav-btn:disabled {
+   opacity: 0.3;
+   cursor: not-allowed;
+   pointer-events: none;
+}
+
 .hint-hide-btn {
    background: none;
    border: none;
    color: var(--color-cream);
    text-decoration: underline;
-   font-size: 0.75rem;
+   font-size: clamp(12px, 1.1vw, 16px);
    font-weight: 700;
    align-self: flex-start;
    cursor: pointer;
@@ -1372,8 +1416,8 @@ html {
    color: var(--color-cream);
    padding: 0.8rem 1.2rem;
    font-family: var(--font-main);
-   font-weight: 900;
-   font-size: 0.8rem;
+   font-weight: 700;
+   font-size: clamp(12px, 1.1vw, 16px);
    text-transform: uppercase;
    text-decoration: underline;
    cursor: pointer;
@@ -1387,25 +1431,98 @@ html {
 }
 
 /* --- Responsive Design --- */
-@media (max-width: 1024px) {
-   .controls-left {
-      width: 120px !important;
+/* Note: Sidebar widths and button sizes now use clamp() - only specific adjustments here */
+
+/* Large screens (≤1440px) */
+@media (max-width: 1440px) {
+   .sliders-group {
+      height: 30%;
+   }
+}
+
+/* Medium-large screens (≤1280px) */
+@media (max-width: 1280px) {
+   .hint-panel {
+      width: 300px;
+      min-height: 180px;
    }
 
-   .controls-right {
-      width: 100px !important;
+   .sliders-group {
+      height: 28%;
+   }
+}
+
+/* Medium screens (≤1024px) */
+@media (max-width: 1024px) {
+   .hint-panel {
+      left: 130px !important;
+      width: 260px !important;
+      min-height: 160px;
+   }
+
+   .sliders-group {
+      height: 25%;
+   }
+
+   .btn-label {
+      font-size: 0.65rem;
+   }
+
+   .pad-label {
+      font-size: 0.65rem;
+   }
+}
+
+/* Small-medium screens (≤900px) */
+@media (max-width: 900px) {
+   .hint-panel {
+      left: 110px !important;
+      width: 240px !important;
+      min-height: 140px;
+      padding: 0.4rem;
+   }
+
+   .sliders-group {
+      height: 22%;
+   }
+}
+
+/* Tablet/Small screens (≤768px) */
+@media (max-width: 768px) {
+   .leftSide {
+      width: 15vw;
+   }
+
+   .rightSide {
+      width: 15vw;
    }
 
    .hint-panel {
-      left: 140px !important;
-      width: 400px !important;
-      font-size: 1rem;
+      left: 100px !important;
+      width: 200px !important;
+      min-height: 120px;
    }
 
-   .circle-btn,
-   .metronome-btn,
-   .play-btn {
-      transform: scale(0.9);
+   .sliders-group {
+      height: 20%;
+      display: none;
+      /* Hide sliders on small screens */
+   }
+
+   .btn-label {
+      font-size: 0.55rem;
+   }
+
+   .pad-label {
+      font-size: 0.55rem;
+   }
+
+   .track-switcher {
+      height: 50px;
+   }
+
+   .track-name {
+      font-size: 0.65rem;
    }
 }
 
@@ -1415,8 +1532,10 @@ html {
 
 /* Pad SVG icons (HiHat, Snare, Kick) */
 .pad-svg-icon {
-   width: 34px;
-   height: 35px;
+   width: max(2.125rem, 1.77vw);
+   /* 34/1920 = 1.77vw */
+   height: max(2.1875rem, 1.82vw);
+   /* 35/1920 = 1.82vw */
 }
 
 .pad-svg-icon path,
@@ -1433,8 +1552,10 @@ html {
 
 /* Metronome SVG icon */
 .metronome-svg-icon {
-   width: 28px;
-   height: 26px;
+   width: max(1.75rem, 1.46vw);
+   /* 28/1920 = 1.46vw */
+   height: max(1.625rem, 1.35vw);
+   /* 26/1920 = 1.35vw */
 }
 
 .metronome-svg-icon path,
@@ -1451,9 +1572,10 @@ html {
 
 /* Play, Upload, Rec icons */
 .play-svg-icon {
-   width: 24px;
-   height: 24px;
-   margin-left: 4px;
+   width: max(1.5rem, 1.25vw);
+   /* 24/1920 = 1.25vw */
+   height: max(1.5rem, 1.25vw);
+   margin-left: 0.25rem;
 }
 
 .play-svg-icon path {
@@ -1461,8 +1583,13 @@ html {
 }
 
 .upload-svg-icon {
-   width: 24px;
-   height: 32px;
+   width: max(1.2rem, 1vw);
+   height: auto;
+   overflow: visible;
+}
+
+.upload-svg-icon:hover svg {
+   fill: var(--color-dark-blue);
 }
 
 .upload-svg-icon path,
@@ -1472,8 +1599,9 @@ html {
 }
 
 .rec-svg-icon {
-   width: 20px;
-   height: 20px;
+   width: max(1.25rem, 1.04vw);
+   /* 20/1920 = 1.04vw */
+   height: max(1.25rem, 1.04vw);
 }
 
 .rec-svg-icon circle {
@@ -1482,8 +1610,9 @@ html {
 
 /* Loop icon */
 .loop-svg-icon {
-   width: 40px;
-   height: 40px;
+   width: max(2.5rem, 2.08vw);
+   /* 40/1920 = 2.08vw */
+   height: max(2.5rem, 2.08vw);
 }
 
 .loop-svg-icon circle,
@@ -1498,8 +1627,10 @@ html {
 
 /* Slider icons (Volume, Pitch) */
 .slider-svg-icon {
-   width: 20px;
-   height: 20px;
+   width: 1.25rem;
+   /* 20px/16 */
+   height: 1.25rem;
+   /* 20px/16 */
 }
 
 .slider-svg-icon path,

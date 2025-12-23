@@ -123,7 +123,10 @@ const TrackControlPanel = ({ trackId, activeHintTarget }) => {
                   className={`circle-btn upload-btn ${activeHintTarget === 'upload-btn' ? 'hint-highlight' : ''}`}
                   onClick={handleMainButtonClick}
                >
-                  <img src={UploadIconSrc} alt="Upload" className="upload-svg-icon" />
+                  <svg className="upload-svg-icon" width="15" height="22" viewBox="0 0 15 22" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M8.07039 0.292893C7.67986 -0.0976311 7.0467 -0.0976311 6.65617 0.292893L0.292213 6.65685C-0.0983112 7.04738 -0.0983112 7.68054 0.292213 8.07107C0.682738 8.46159 1.3159 8.46159 1.70643 8.07107L7.36328 2.41421L13.0201 8.07107C13.4107 8.46159 14.0438 8.46159 14.4343 8.07107C14.8249 7.68054 14.8249 7.04738 14.4343 6.65685L8.07039 0.292893ZM6.36328 17C6.36328 17.5523 6.811 18 7.36328 18C7.91557 18 8.36328 17.5523 8.36328 17L7.36328 17L6.36328 17ZM7.36328 1L6.36328 1L6.36328 17L7.36328 17L8.36328 17L8.36328 1L7.36328 1Z" fill="#F9FFEB"/>
+<line x1="1.36328" y1="21" x2="13.3633" y2="21" stroke="#F9FFEB" stroke-width="2" stroke-linecap="round"/>
+</svg>
                   <span className="btn-label">UPLOAD</span>
                </button>
             ) : (
@@ -165,7 +168,7 @@ const TrackControlPanel = ({ trackId, activeHintTarget }) => {
                   <svg
                      width="26" height="7" viewBox="0 0 26 7" fill="none"
                      className="slider-handle"
-                     style={{ top: `${9 + (1 - volumeToVirtual(currentVolume)) * 140}px` }}
+                     style={{ top: `${5.7 + (1 - volumeToVirtual(currentVolume)) * 88.6}%` }}
                   >
                      <rect width="26" height="7" fill="#e74c3c" />
                   </svg>
@@ -206,7 +209,7 @@ const TrackControlPanel = ({ trackId, activeHintTarget }) => {
                   <svg
                      width="26" height="7" viewBox="0 0 26 7" fill="none"
                      className="slider-handle"
-                     style={{ top: `${9 + (1 - pitchToVirtual(currentPitch)) * 140}px` }}
+                     style={{ top: `${5.7 + (1 - pitchToVirtual(currentPitch)) * 88.6}%` }}
                   >
                      <rect width="26" height="7" fill="#e74c3c" />
                   </svg>

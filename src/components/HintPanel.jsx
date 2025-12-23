@@ -70,6 +70,9 @@ const hints = [
 ];
 
 const HintPanel = ({ activeIndex, onNext, onPrev, onHide, onShow, visible }) => {
+   const isFirstPage = activeIndex === 0;
+   const isLastPage = activeIndex === hints.length - 1;
+
    if (!visible) {
       return (
          <button className="hint-panel-minimized" onClick={onShow}>
@@ -89,13 +92,21 @@ const HintPanel = ({ activeIndex, onNext, onPrev, onHide, onShow, visible }) => 
          </div>
 
          <div className="hint-controls">
-            <button className="hint-nav-btn prev" onClick={onPrev}>
+            <button
+               className={`hint-nav-btn prev ${isFirstPage ? 'disabled' : ''}`}
+               onClick={onPrev}
+               disabled={isFirstPage}
+            >
                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M18.41 7.41L17 6l-6 6 6 6 1.41-1.41L13.83 12z" />
                   <path d="M12.41 7.41L11 6l-6 6 6 6 1.41-1.41L7.83 12z" />
                </svg>
             </button>
-            <button className="hint-nav-btn next" onClick={onNext}>
+            <button
+               className={`hint-nav-btn next ${isLastPage ? 'disabled' : ''}`}
+               onClick={onNext}
+               disabled={isLastPage}
+            >
                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M5.59 7.41L7 6l6 6-6 6-1.41-1.41L10.17 12z" />
                   <path d="M11.59 7.41L13 6l6 6-6 6-1.41-1.41L16.17 12z" />
@@ -109,5 +120,6 @@ const HintPanel = ({ activeIndex, onNext, onPrev, onHide, onShow, visible }) => 
       </div>
    );
 };
+
 
 export { HintPanel, hints };
