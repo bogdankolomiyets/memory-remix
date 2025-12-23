@@ -957,7 +957,7 @@ document.addEventListener("DOMContentLoaded", async function () {
     try {
       console.log("Fetching memories from Supabase...");
       
-      const response = await fetch(`${SUPABASE_URL}/rest/v1/memories?status=eq.approved&select=*`, {
+      const response = await fetch(`${SUPABASE_URL}/rest/v1/memories?status=eq.approved&select=id,name,title,audio_url,created_at,status`, {
         method: 'GET',
         headers: {
           'apikey': SUPABASE_ANON_KEY,
