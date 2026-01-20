@@ -1,9 +1,30 @@
 .DS_Store
 search.html
 401.html
+dev.html
+PR_DESCRIPTION.md
 node_modules/
 .env
 .env.local
 .vite/
 *.local
 
+# Development: visualizer source repo
+visualizator/
+
+# Build and IDE
+# NOTE: dist/ is NOT ignored - it contains bundle.js needed for Webflow
+.vscode/
+.idea/
+*.log
+
+# System files
+Thumbs.db
+*.swp
+*.swo
+
+# Debug files
+*.map.js
+
+# Lock files (optional - uncomment if you don't want to track)
+# package-lock.json

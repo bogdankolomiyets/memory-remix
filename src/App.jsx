@@ -41,6 +41,33 @@ function App({ debugMode, samples }) {
       setPendingTrackSwitch(null);
    };
 
+   // Trigger microphone permission when user reaches the mic-setup hint OR automatically if already granted
+   useEffect(() => {
+      // Browsers block AudioContext auto-start. We need a user gesture.
+      // Init mic on the FIRST click anywhere on the page if not already done.
+      const handleFirstInteraction = () => {
+         audioEngine.initMicrophone();
+         // Remove listener after first attempt
+         window.removeEventListener('click', handleFirstInteraction);
+         window.removeEventListener('touchstart', handleFirstInteraction);
+      };
+
+      window.addEventListener('click', handleFirstInteraction);
+      window.addEventListener('touchstart', handleFirstInteraction);
+
+      return () => {
+         window.removeEventListener('click', handleFirstInteraction);
+         window.removeEventListener('touchstart', handleFirstInteraction);
+      };
+   }, []);
+
+   useEffect(() => {
+      // Also explicitly trigger on mic-setup hint (index 5) for new users
+      if (activeHintIndex === 5) {
+         audioEngine.initMicrophone();
+      }
+   }, [activeHintIndex]);
+
 
    const handleOpenSubmission = async () => {
 
@@ -103,6 +130,12 @@ function App({ debugMode, samples }) {
                isProcessing={isProcessing}
             />
          </div>
+
+         {/* Mic Permission Highlight Area - Shows when mic-setup hint is active */}
+         {activeTarget === 'mic-permission-area' && (
+            <div className="mic-permission-area hint-highlight-box" />
+         )}
+
          {debugMode && <DebugLatency />}
 
          <SubmissionSidebar

@@ -1,9 +1,14 @@
-import React from 'react';
+import React, { useRef } from 'react';
+import GravityVisualizer from './GravityVisualizer';
+import { audioEngine } from '../engine/AudioEngine';
 
 const CenterStage = () => {
+   // Create a stable ref for the analyser to pass to the visualizer
+   const analyserRef = useRef(audioEngine.analyser);
+
    return (
       <div className="center-stage">
-         {/* Three.js Canvas will be inserted here */}
+         <GravityVisualizer analyserRef={analyserRef} />
       </div>
    );
 };

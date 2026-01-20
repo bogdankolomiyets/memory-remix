@@ -10,7 +10,7 @@ const TrackControlPanel = ({ trackId, activeHintTarget }) => {
       // Separate Controls
       userVolume, recordVolume, setUserVolume, setRecordVolume,
       userPitch, recordPitch, setUserPitch, setRecordPitch,
-      userLoop, recordLoop, toggleUserLoop, toggleRecordLoop,
+      userLoop, userLoopState, recordLoop, toggleUserLoop, toggleRecordLoop,
       // Per-track Playback
       isUserPlaying, isRecordPlaying,
       toggleUserPlay, toggleRecordPlay,
@@ -25,7 +25,10 @@ const TrackControlPanel = ({ trackId, activeHintTarget }) => {
    const isTrack1 = trackId === 1;
    const currentVolume = isTrack1 ? userVolume : recordVolume;
    const currentPitch = isTrack1 ? userPitch : recordPitch;
-   const isLooping = isTrack1 ? userLoop : recordLoop;
+   // Loop State Logic
+   const isLooping = isTrack1 ? (userLoopState === 'ACTIVE' || userLoopState === 'RECORDING') : recordLoop;
+   const loopLabel = (isTrack1 && userLoopState === 'RECORDING') ? 'REC' : 'LOOP';
+   const loopActiveColor = (isTrack1 && userLoopState === 'RECORDING') ? '#e74c3c' : '#063A5C';
    const isCurrentTrackPlaying = isTrack1 ? isUserPlaying : isRecordPlaying;
 
    // Play button is disabled if no audio to play
@@ -124,9 +127,9 @@ const TrackControlPanel = ({ trackId, activeHintTarget }) => {
                   onClick={handleMainButtonClick}
                >
                   <svg className="upload-svg-icon" width="15" height="22" viewBox="0 0 15 22" fill="none" xmlns="http://www.w3.org/2000/svg">
-<path d="M8.07039 0.292893C7.67986 -0.0976311 7.0467 -0.0976311 6.65617 0.292893L0.292213 6.65685C-0.0983112 7.04738 -0.0983112 7.68054 0.292213 8.07107C0.682738 8.46159 1.3159 8.46159 1.70643 8.07107L7.36328 2.41421L13.0201 8.07107C13.4107 8.46159 14.0438 8.46159 14.4343 8.07107C14.8249 7.68054 14.8249 7.04738 14.4343 6.65685L8.07039 0.292893ZM6.36328 17C6.36328 17.5523 6.811 18 7.36328 18C7.91557 18 8.36328 17.5523 8.36328 17L7.36328 17L6.36328 17ZM7.36328 1L6.36328 1L6.36328 17L7.36328 17L8.36328 17L8.36328 1L7.36328 1Z" fill="#F9FFEB"/>
-<line x1="1.36328" y1="21" x2="13.3633" y2="21" stroke="#F9FFEB" stroke-width="2" stroke-linecap="round"/>
-</svg>
+                     <path d="M8.07039 0.292893C7.67986 -0.0976311 7.0467 -0.0976311 6.65617 0.292893L0.292213 6.65685C-0.0983112 7.04738 -0.0983112 7.68054 0.292213 8.07107C0.682738 8.46159 1.3159 8.46159 1.70643 8.07107L7.36328 2.41421L13.0201 8.07107C13.4107 8.46159 14.0438 8.46159 14.4343 8.07107C14.8249 7.68054 14.8249 7.04738 14.4343 6.65685L8.07039 0.292893ZM6.36328 17C6.36328 17.5523 6.811 18 7.36328 18C7.91557 18 8.36328 17.5523 8.36328 17L7.36328 17L6.36328 17ZM7.36328 1L6.36328 1L6.36328 17L7.36328 17L8.36328 17L8.36328 1L7.36328 1Z" fill="#F9FFEB" />
+                     <line x1="1.36328" y1="21" x2="13.3633" y2="21" stroke="#F9FFEB" stroke-width="2" stroke-linecap="round" />
+                  </svg>
                   <span className="btn-label">UPLOAD</span>
                </button>
             ) : (
@@ -230,18 +233,45 @@ const TrackControlPanel = ({ trackId, activeHintTarget }) => {
 
          {/* 4. Loop */}
          <div className="control-group bottom-group">
-            <button
-               className={`circle-btn loop-btn ${isLooping ? 'active' : ''} ${activeHintTarget === 'loop-btn' ? 'hint-highlight' : ''}`}
-               onClick={handleLoopToggle}
-            >
-               <div className="loop-icon-wrapper">
-                  <svg width="41" height="39" viewBox="0 0 41 39" fill="none" className="loop-svg-icon">
-                     <circle cx="37.2406" cy="18.0194" r="3.08154" fill={isLooping ? '#063A5C' : '#F9FFEB'} stroke={isLooping ? '#063A5C' : '#F9FFEB'} strokeWidth="1.04464" />
-                     <circle cx="19.2206" cy="19.2206" r="18.6983" stroke={isLooping ? '#063A5C' : '#F9FFEB'} strokeWidth="1.04464" />
-                  </svg>
-               </div>
-               <span className="btn-label" style={{ marginTop: '4px' }}>LOOP</span>
-            </button>
+            {(() => {
+               // Determine class and icon color based on state
+               let stateClass = '';
+               let iconColor = '#f9ffeb'; // default: cream/white
+               let label = loopLabel;
+
+               if (isTrack1) {
+                  if (userLoopState === 'RECORDING') {
+                     stateClass = 'recording';
+                     iconColor = '#e74c3c'; // red
+                  } else if (userLoopState === 'ACTIVE') {
+                     stateClass = 'looping';
+                     iconColor = '#f9ffeb';
+                     label = 'LOOPING';
+                  }
+               } else {
+                  // Track 2 (Simple Toggle)
+                  if (recordLoop) {
+                     stateClass = 'looping';
+                     iconColor = '#f9ffeb';
+                     label = 'LOOPING';
+                  }
+               }
+
+               return (
+                  <button
+                     className={`circle-btn loop-btn ${stateClass} ${activeHintTarget === 'loop-btn' ? 'hint-highlight' : ''}`}
+                     onClick={handleLoopToggle}
+                  >
+                     <div className="loop-icon-wrapper">
+                        <svg width="41" height="39" viewBox="0 0 41 39" fill="none" className="loop-svg-icon">
+                           <circle cx="37.2406" cy="18.0194" r="3.08154" fill={iconColor} stroke={iconColor} strokeWidth="1.04464" />
+                           <circle cx="19.2206" cy="19.2206" r="18.6983" stroke={iconColor} strokeWidth="1.04464" />
+                        </svg>
+                     </div>
+                     <span className="btn-label" style={{ marginTop: '4px' }}>{label}</span>
+                  </button>
+               );
+            })()}
          </div>
       </div>
    );

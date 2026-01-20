@@ -17,6 +17,7 @@
   "dependencies": {
     "@breezystack/lamejs": "^1.2.7",
     "@fseehawer/react-circular-slider": "^3.2.7",
+    "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.4.2",
     "@supabase/supabase-js": "^2.89.0",
     "gsap": "^3.12.0",
@@ -26,6 +27,7 @@
     "react-circular-input": "^0.2.4",
     "react-circular-slider-svg": "^0.4.0",
     "react-dom": "^19.2.3",
+    "sass": "^1.97.2",
     "three": "^0.182.0"
   }
 }

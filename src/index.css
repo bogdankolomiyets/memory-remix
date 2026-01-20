@@ -185,6 +185,28 @@ html {
    border: none;
 }
 
+/* Loop Button - Recording State (A-B Point A set) */
+.controls-left .circle-btn.loop-btn.recording {
+   background-color: var(--color-cream) !important;
+   color: #e74c3c !important;
+   border: none !important;
+}
+
+.controls-left .circle-btn.loop-btn.recording .btn-label {
+   color: #e74c3c !important;
+}
+
+/* Loop Button - Active/Looping State */
+.controls-left .circle-btn.loop-btn.looping {
+   background-color: var(--color-dark-blue) !important;
+   color: var(--color-cream) !important;
+   border: 2px solid var(--color-cream) !important;
+}
+
+.controls-left .circle-btn.loop-btn.looping .btn-label {
+   color: var(--color-cream) !important;
+}
+
 .controls-left .btn-label {
    color: var(--color-text-light);
    margin-top: 8px;
@@ -1643,6 +1665,26 @@ html {
    RESPONSIVE STYLES
    ======================================== */
 
+/* Mic Permission Overlay - Highlights where browser permission dialog appears */
+.mic-permission-area {
+   position: fixed;
+   top: -90px;
+   left: 20%;
+   transform: translateX(-50%);
+   width: 300px;
+   height: 300px;
+   z-index: 9999;
+   pointer-events: none;
+   border-radius: 50%;
+}
+
+.mic-permission-area.hint-highlight-box::before {
+   border-radius: 50% !important;
+   background: radial-gradient(circle, rgba(0, 255, 255, 0.4) 0%, rgba(0, 255, 255, 0) 70%) !important;
+   box-shadow: none !important;
+   filter: blur(10px);
+}
+
 @media (max-width: 768px) {
 
    .controls-left,
@@ -1655,5 +1697,10 @@ html {
       left: 50% !important;
       transform: translateX(-50%);
       bottom: 20px !important;
+   }
+
+   .mic-permission-area {
+      width: 100%;
+      height: 80px;
    }
 }

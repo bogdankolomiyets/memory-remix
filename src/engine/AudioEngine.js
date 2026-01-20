@@ -41,6 +41,15 @@ class AudioEngine {
       // 3. User Mix (Upload) -> Speakers
       this.userGain.connect(this.masterOut);
 
+      // 4. Visualizer Analyser
+      this.analyser = this.ctx.createAnalyser();
+      this.analyser.fftSize = 2048;
+      this.analyserData = new Uint8Array(this.analyser.frequencyBinCount);
+
+      this.masterGain.connect(this.analyser);
+      this.userGain.connect(this.analyser);
+      this.micGain.connect(this.analyser);
+
       // 3. Mic -> Recorder ONLY (Voice only)
       this.micGain.connect(this.recorderDest);
 
@@ -59,6 +68,9 @@ class AudioEngine {
       this.userVolume = 0.8;
       this.userPitch = 1.0;
       this.userLoop = false;
+      this.userLoopState = 'OFF'; // 'OFF', 'RECORDING', 'ACTIVE'
+      this.userLoopStart = 0;
+      this.userLoopEnd = 0;
 
       this.recordVolume = 0.8;
       this.recordPitch = 1.0;
@@ -205,6 +217,11 @@ class AudioEngine {
       return buffer;
    }
 
+   getFrequencyData() {
+      this.analyser.getByteFrequencyData(this.analyserData);
+      return this.analyserData;
+   }
+
    subscribe(cb) {
       this.listeners.add(cb);
       return () => this.listeners.delete(cb);
@@ -310,8 +327,80 @@ class AudioEngine {
    }
 
    toggleUserLoop() {
-      this.userLoop = !this.userLoop;
+      // 3-State A-B Looping Logic
+      if (!this.isUserPlaying && !this.isRecordPlaying) {
+         // NOT PLAYING: Simple On/Off (Standard Loop)
+         if (this.userLoopState === 'OFF') {
+            this.userLoopState = 'ACTIVE';
+            this.userLoopStart = 0;
+            this.userLoopEnd = this.userTrackBuffer ? this.userTrackBuffer.duration : 0;
+         } else {
+            this.userLoopState = 'OFF';
+         }
+      } else {
+         // PLAYING: A-B Logic
+         if (this.userLoopState === 'OFF') {
+            // Click 1: Start Recording Loop (Point A)
+            this.userLoopState = 'RECORDING';
+            // Calculate current playback time in the buffer
+            const elapsed = this.ctx.currentTime - this.userPlaybackStartTime;
+            this.userLoopStart = Math.max(0, elapsed * this.userPitch);
+         } else if (this.userLoopState === 'RECORDING') {
+            // Click 2: End Recording Loop (Point B) -> ACTIVE
+            this.userLoopState = 'ACTIVE';
+            const elapsed = this.ctx.currentTime - this.userPlaybackStartTime;
+            // Ensure end > start, otherwise flip or default
+            let end = Math.max(0, elapsed * this.userPitch);
+
+            // Safety: Minimum loop size (e.g. 50ms) to prevent audio glitches
+            if (end - this.userLoopStart < 0.05) {
+               console.warn("[AudioEngine] Loop too short, using full track");
+               end = 0; // Will trigger full track fallback below
+            }
+
+            if (end <= this.userLoopStart) {
+               // If end is before start (e.g. wrapped around?), just reset to full
+               end = this.userTrackBuffer ? this.userTrackBuffer.duration : end + 1;
+            }
+            this.userLoopEnd = end;
+            console.log(`[AudioEngine] Loop Set: ${this.userLoopStart.toFixed(2)}s -> ${this.userLoopEnd.toFixed(2)}s`);
+
+            // Apply loop immediately to the running source
+            if (this.userPlaybackSource) {
+               this.applyLoopToSource(this.userPlaybackSource);
+            }
+         } else {
+            // Click 3: Turn Off
+            this.userLoopState = 'OFF';
+            console.log("[AudioEngine] Loop Cleared");
+            if (this.userPlaybackSource) {
+               this.userPlaybackSource.loop = false;
+            }
+         }
+      }
+
+      this.emit('userLoopState', this.userLoopState);
+      // Legacy compat
+      this.userLoop = this.userLoopState !== 'OFF';
       this.emit('userLoop', this.userLoop);
+   }
+
+   applyLoopToSource(source) {
+      if (!source || this.userLoopState !== 'ACTIVE') return;
+      try {
+         source.loop = true;
+         // Safety check for duration
+         if (this.userLoopEnd > 0 && this.userLoopEnd > this.userLoopStart) {
+            source.loopStart = this.userLoopStart;
+            source.loopEnd = this.userLoopEnd;
+         } else {
+            // Fallback: Loop whole track if points invalid
+            source.loopStart = 0;
+            source.loopEnd = source.buffer.duration;
+         }
+      } catch (e) {
+         console.warn("Failed to apply loop to source:", e);
+      }
    }
 
    toggleRecordLoop() {
@@ -498,6 +587,11 @@ class AudioEngine {
 
    // --- Recording ---
    async initMicrophone() {
+      // Always ensure context is running when initializing mic
+      if (this.ctx.state === 'suspended') {
+         await this.ctx.resume();
+      }
+
       if (this.micNode) return;
       try {
          const stream = await navigator.mediaDevices.getUserMedia({
@@ -705,13 +799,19 @@ class AudioEngine {
       const startUserTrack = () => {
          this.userPlaybackSource = this.ctx.createBufferSource();
          this.userPlaybackSource.buffer = this.userTrackBuffer;
-         this.userPlaybackSource.playbackRate.value = this.userPitch;
          this.userPlaybackSource.connect(this.userGain);
 
+         // Handle 3-state looping
+         if (this.userLoopState === 'ACTIVE') {
+            this.applyLoopToSource(this.userPlaybackSource);
+         }
+
          this.userPlaybackSource.onended = () => {
-            if (this.isUserPlaying && this.userLoop) {
+            // In native looping mode, onended only fires if loop=false or track is cut
+            if (this.isUserPlaying && this.userLoopState !== 'ACTIVE' && this.userLoop) {
+               // Legacy fallback for simple full track loop
                startUserTrack();
-            } else {
+            } else if (this.userLoopState !== 'ACTIVE') {
                this.isUserPlaying = false;
                this.userPlaybackStartTime = 0;
                this.emit('userPlay', false);
@@ -774,6 +874,12 @@ class AudioEngine {
             this.userPlaybackSource.buffer = this.userTrackBuffer;
             this.userPlaybackSource.playbackRate.value = proportionalBgPitch;
             this.userPlaybackSource.connect(this.userGain);
+
+            // Loop background track if user set a loop
+            if (this.userLoopState === 'ACTIVE') {
+               this.applyLoopToSource(this.userPlaybackSource);
+            }
+
             this.userPlaybackSource.start();
          }
 

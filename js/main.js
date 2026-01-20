@@ -956,7 +956,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   async function loadMemories() {
     try {
       console.log("Fetching memories from Supabase...");
-      
+
       const response = await fetch(`${SUPABASE_URL}/rest/v1/memories?status=eq.approved&select=id,name,title,audio_url,created_at,status`, {
         method: 'GET',
         headers: {
@@ -970,11 +970,15 @@ document.addEventListener("DOMContentLoaded", async function () {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       const data = await response.json();
       console.log("Loaded memories from Supabase:", data?.length || 0, data);
       renderCards(data || []);
-      
+      // Re-initialize Howler players for dynamically loaded cards
+      setTimeout(() => {
+        initHowlerJSAudioPlayer();
+      }, 100);
+
     } catch (err) {
       console.error("Memory Library fetch error:", err);
       console.log("Rendering empty cards as fallback");
@@ -1066,7 +1070,7 @@ async function getAssignmentForTab(cardsCount) {
     try {
       const parsed = JSON.parse(cached);
       if (Array.isArray(parsed) && parsed.length >= cardsCount) return parsed;
-    } catch {}
+    } catch { }
   }
 
   const images = await fetchCoverUrls();
@@ -1165,12 +1169,12 @@ window.exitSelectedState = function exitSelectedState() {
   const targetRect = placeholder
     ? placeholder.getBoundingClientRect()
     : {
-        left: parseFloat(clickedCard.dataset.origLeft) || 0,
-        top: parseFloat(clickedCard.dataset.origTop) || 0,
-        width: Number(clickedCard.dataset.origWidth) || clickedCard.offsetWidth,
-        height:
-          Number(clickedCard.dataset.origHeight) || clickedCard.offsetHeight,
-      };
+      left: parseFloat(clickedCard.dataset.origLeft) || 0,
+      top: parseFloat(clickedCard.dataset.origTop) || 0,
+      width: Number(clickedCard.dataset.origWidth) || clickedCard.offsetWidth,
+      height:
+        Number(clickedCard.dataset.origHeight) || clickedCard.offsetHeight,
+    };
 
   const overlay = document.querySelector(".memory-lightbox");
   const closeBtn = document.querySelector(".memory-lightbox-close");
@@ -1218,7 +1222,7 @@ window.exitSelectedState = function exitSelectedState() {
       onComplete: () => {
         try {
           overlay.remove();
-        } catch (e) {}
+        } catch (e) { }
       },
     });
   }
@@ -1230,7 +1234,7 @@ window.exitSelectedState = function exitSelectedState() {
       onComplete: () => {
         try {
           closeBtn.remove();
-        } catch (e) {}
+        } catch (e) { }
       },
     });
   }
@@ -2279,7 +2283,7 @@ function initHowlerJSAudioPlayer() {
     if (window.howlerSoundInstances[uniqueId]) {
       try {
         window.howlerSoundInstances[uniqueId].unload();
-      } catch (e) {}
+      } catch (e) { }
       delete window.howlerSoundInstances[uniqueId];
     }
 
@@ -2304,7 +2308,7 @@ function initHowlerJSAudioPlayer() {
 
     const sound = new Howl({
       src: [audioSrc],
-      html5: true,
+      html5: false, // Use Web Audio API for analyzer compatibility
       preload: false,
 
       onload: () => {
@@ -2340,6 +2344,16 @@ function initHowlerJSAudioPlayer() {
     });
 
     window.howlerSoundInstances[uniqueId] = sound;
+
+    // Inject 3D Visualizer - .audio-vizualizer is a sibling, not a child
+    const parentContainer = element.closest(".play-controls");
+    const vizContainer = parentContainer ? parentContainer.querySelector(".audio-vizualizer") : null;
+    console.log("[DEBUG] Viz container found:", vizContainer, "mountFn exists:", typeof window.mountMemoryVisualizer);
+    if (vizContainer && typeof window.mountMemoryVisualizer === "function") {
+      console.log("[DEBUG] Mounting 3D visualizer...");
+      vizContainer.innerHTML = ""; // Clear placeholder
+      window.mountMemoryVisualizer(vizContainer, sound);
+    }
 
     // -----------------------------
     // FUNCTIONS
