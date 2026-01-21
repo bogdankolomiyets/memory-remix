@@ -6,7 +6,8 @@ gsap.registerPlugin(ScrollTrigger);
 const lenis = new Lenis({
   wrapper: document.querySelector(".main-content"),
   content: document.querySelector(".main-content > *"),
-  duration: 0.9,
+  lerp: 0.12,
+  smoothWheel: true,
   anchors: true,
 });
 
@@ -60,7 +61,8 @@ document.addEventListener("DOMContentLoaded", () => {
     lenisIntro = new Lenis({
       wrapper: introSection,
       content: introSection.querySelector("*"),
-      duration: 0.5,
+      lerp: 0.12,
+      smoothWheel: true,
       wheelMultiplier: 0.5,
     });
     function raf(time) {
@@ -83,7 +85,8 @@ document.addEventListener("DOMContentLoaded", () => {
     lenisMain = new Lenis({
       wrapper: mainContent,
       content: mainContent.querySelector("*"),
-      duration: 0.9,
+      lerp: 0.12,
+      smoothWheel: true,
     });
     function raf(time) {
       if (!lenisMain) return;
