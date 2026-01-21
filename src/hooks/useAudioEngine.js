@@ -16,7 +16,8 @@ export function useAudioEngine() {
    const [recordVolume, setRecordVolumeState] = useState(0.8);
    const [userPitch, setUserPitchState] = useState(1.0);
    const [recordPitch, setRecordPitchState] = useState(1.0);
-   const [userLoop, setUserLoopState] = useState(false);
+   const [userLoop, setUserLoopState] = useState(false); // Legacy boolean (keeping for now)
+   const [userLoopState, setUserLoopStateValue] = useState('OFF'); // New 3-State
    const [recordLoop, setRecordLoopState] = useState(false);
 
    // Separate Track Playback States
@@ -53,6 +54,7 @@ export function useAudioEngine() {
          }
          // Sync local state with engine events
          if (event === 'userLoop') setUserLoopState(data);
+         if (event === 'userLoopState') setUserLoopStateValue(data);
          if (event === 'recordLoop') setRecordLoopState(data);
          // Per-track playback state + 3D sync
          if (event === 'userPlay') {
@@ -170,7 +172,7 @@ export function useAudioEngine() {
       // Separate Track State
       userVolume, recordVolume,
       userPitch, recordPitch,
-      userLoop, recordLoop,
+      userLoop, userLoopState, recordLoop,
 
       // Per-track Playback State
       isUserPlaying, isRecordPlaying,

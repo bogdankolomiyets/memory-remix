@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
-    open: true,
+    open: '/dev.html',
     cors: true
   },
   resolve: {
@@ -27,5 +27,6 @@ export default defineConfig({
     cssCodeSplit: false,
   },
 })
+
 
 

@@ -36,6 +36,20 @@ const initPlayer = () => {
   }
 }
 
+import MemorySphereVisualizer from './components/MemorySphereVisualizer.jsx'
+
+// Expose mounting function for external memory cards
+window.mountMemoryVisualizer = (container, howlInstance) => {
+  if (!container) return;
+  const root = ReactDOM.createRoot(container);
+  root.render(
+    <StrictMode>
+      <MemorySphereVisualizer howlInstance={howlInstance} />
+    </StrictMode>
+  );
+  return root;
+};
+
 // Пытаемся запуститься сразу
 const mounted = initPlayer();
 
