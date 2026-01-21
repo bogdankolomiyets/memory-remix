@@ -5,13 +5,13 @@
 /* --- CSS Variables --- */
 :root {
    --color-cream: #f9ffeb;
-   --color-dark-blue: #003354;
+   --color-dark-blue: #063a5c;
    --color-cyan: #00FFFF;
-   --color-bg-dark: #002b45;
+   --color-bg-dark: #063a5c;
    --color-bg-panel: #f5fae0;
-   --color-accent: #003d5c;
+   --color-accent: #063a5c;
    --color-text-light: #ffffff;
-   --color-text-dark: #002b45;
+   --color-text-dark: #000;
    --color-highlight: #ffffff;
    --font-main: 'PP Mori', 'Inter', sans-serif;
 }
