@@ -1367,12 +1367,11 @@ html {
 }
 
 .hint-text {
-   font-family: var(--font-main);
-   font-weight: 600;
-   font-size: clamp(12px, 1.1vw, 16px);
+   font-family: var(--font-family--body);
+   font-weight: var(--body--font-weight);
+   font-size: var(--body--size-regular);
    text-transform: uppercase;
-   letter-spacing: 0.5px;
-   line-height: 1.5;
+   line-height: var(--line-height--regular);
 }
 
 .hint-controls {
@@ -1414,8 +1413,10 @@ html {
    border: none;
    color: var(--color-cream);
    text-decoration: underline;
-   font-size: clamp(12px, 1.1vw, 16px);
-   font-weight: 700;
+   font-family: var(--font-family--body);
+   font-weight: var(--body--font-weight);
+   font-size: var(--body--size-regular);
+   line-height: var(--line-height--regular);
    align-self: flex-start;
    cursor: pointer;
    padding: 0;
