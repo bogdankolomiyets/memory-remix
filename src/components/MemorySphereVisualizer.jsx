@@ -14,7 +14,7 @@ function SphereParticles({ analyser }) {
          const phi = Math.acos(-1 + (2 * i) / count);
          const theta = Math.sqrt(count * Math.PI) * phi;
 
-         const radius = 0.4;
+         const radius = 1.0;
          const x = radius * Math.cos(theta) * Math.sin(phi);
          const y = radius * Math.sin(theta) * Math.sin(phi);
          const z = radius * Math.cos(phi);
@@ -71,7 +71,7 @@ function SphereParticles({ analyser }) {
    });
 
    return (
-      <Points ref={pointsRef} positions={livePositions} stride={3} position={[0, 0.3, 0]}>
+      <Points ref={pointsRef} positions={livePositions} stride={3} position={[0, 0, 0]}>
          <PointMaterial
             transparent
             color="#F9FFEB"
@@ -113,7 +113,7 @@ const MemorySphereVisualizer = ({ howlInstance }) => {
                }
                source = sound._node.__source;
                source.connect(newAnalyser);
-               newAnalyser.connect(ctx.destination);
+               // newAnalyser.connect(ctx.destination); // Commented out to fix double audio
             } else if (window.Howler.masterGain) {
                // Fallback to global master if it's Web Audio
                window.Howler.masterGain.connect(newAnalyser);
@@ -143,9 +143,39 @@ const MemorySphereVisualizer = ({ howlInstance }) => {
       };
    }, [howlInstance]);
 
+   const [fadedIn, setFadedIn] = React.useState(false);
+   const wrapperRef = useRef(null);
+
+   useEffect(() => {
+      // Fade in shortly after mount to ensure smooth transition
+      const timer = setTimeout(() => {
+         setFadedIn(true);
+      }, 100);
+
+      return () => {
+         clearTimeout(timer);
+      };
+   }, []);
+
    return (
-      <div style={{ width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }}>
-         <Canvas camera={{ position: [0, 0, 3], fov: 45 }} dpr={[1, 2]}>
+      <div
+         ref={wrapperRef}
+         className="memory-sphere-wrapper"
+         style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            pointerEvents: 'none',
+            opacity: fadedIn ? 1 : 0,
+            transition: 'opacity 1.5s ease'
+         }}
+      >
+         <Canvas camera={{ position: [0, 0, 3.6], fov: 45 }} dpr={[1, 2]} style={{ width: '100%', height: '100%' }}>
             <ambientLight intensity={0.5} />
             <SphereParticles analyser={analyser} />
          </Canvas>

@@ -28,3 +28,6 @@ Thumbs.db
 
 # Lock files (optional - uncomment if you don't want to track)
 # package-lock.json
+
+# Local mock data
+src/mock-data.js

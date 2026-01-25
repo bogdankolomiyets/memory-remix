@@ -5,17 +5,18 @@ import * as THREE from 'three';
 import { simulationVertexShader, simulationFragmentShader, velocityFragmentShader } from './simulationShaders';
 
 // Initial positions with MASS stored in W component
+// We use a DataTexture to pass initial state to the GPGPU shader.
 const getDataTexture = (size) => {
    const number = size * size;
    const data = new Float32Array(4 * number);
    for (let i = 0; i < size; i++) {
       for (let j = 0; j < size; j++) {
          const index = i * size + j;
-         // TSL: vec3(5, 0.2, 5) spread
+         // Setup initial particle cloud (matching the original TSL spread)
          data[4 * index] = (Math.random() - 0.5) * 5.0;      // X spread
          data[4 * index + 1] = (Math.random() - 0.5) * 0.2;  // Y thin disk
          data[4 * index + 2] = (Math.random() - 0.5) * 5.0;  // Z spread
-         // MASS MULTIPLIER stored in W (0.25 to 1.0)
+         // MASS MULTIPLIER stored in W (0.25 to 1.0) for individual gravity influence
          data[4 * index + 3] = Math.random() * 0.75 + 0.25;
       }
    }
@@ -31,7 +32,7 @@ const getVelocityTexture = (size) => {
    for (let i = 0; i < number; i++) {
       const phi = Math.random() * Math.PI * 2;
       const theta = Math.random() * Math.PI;
-      // TSL: sphericalToVec3(phi, theta).mul(0.05)
+      // Convert spherical coordinates to cartesian for initial outward velocity
       data[4 * i] = Math.sin(phi) * Math.sin(theta) * 0.05;
       data[4 * i + 1] = Math.cos(phi) * 0.05;
       data[4 * i + 2] = Math.sin(phi) * Math.cos(theta) * 0.05;
@@ -195,7 +196,6 @@ const Particles = ({ attractorsData, count = 262144 }) => {
          gl.copyTextureToTexture(velTex, velocitiesRef.current[1].texture);
 
          needsInit.current = false;
-         console.log('GPGPU Particles initialized!');
       }
 
       // Update attractor positions from props
@@ -210,11 +210,6 @@ const Particles = ({ attractorsData, count = 262144 }) => {
          }
          // Force uniforms to sync to GPU
          velocityMaterial.uniformsNeedUpdate = true;
-
-         // Debug log every ~2 seconds
-         if (Math.random() < 0.008) {
-            console.log('Attractors:', uAttractors.map(v => `(${v.x.toFixed(2)}, ${v.y.toFixed(2)}, ${v.z.toFixed(2)})`));
-         }
       }
 
       // 1. Velocity Pass

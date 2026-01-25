@@ -13,7 +13,8 @@
    --color-text-light: #ffffff;
    --color-text-dark: #002b45;
    --color-highlight: #ffffff;
-   --font-main: 'PP Mori', 'Inter', sans-serif;
+   /* Use the same font as Webflow for consistency */
+   --font-main: var(--font-family--body, 'PP Mori', 'Inter', sans-serif);
 }
 
 /* --- Global Reset --- */
@@ -549,11 +550,11 @@ html {
 }
 
 .track-name {
-   font-size: max(0.5rem, 0.67vw);
-   /* 12.8px/1920 = 0.67vw, no upper limit */
+   font-size: 16px;
+   /* Fixed 16px */
    text-transform: uppercase;
-   letter-spacing: 1px;
-   font-weight: 800;
+   letter-spacing: 0px;
+   font-weight: 600;
 }
 
 /* Carousel Components */
@@ -1350,7 +1351,7 @@ html {
    height: auto;
    background: transparent;
    border: 1px solid var(--color-cream);
-   padding: 0.5rem;
+   padding: 10px;
    display: flex;
    flex-direction: column;
    justify-content: space-between;
@@ -1369,10 +1370,11 @@ html {
 .hint-text {
    font-family: var(--font-main);
    font-weight: 600;
-   font-size: clamp(12px, 1.1vw, 16px);
+   font-size: 16px;
    text-transform: uppercase;
-   letter-spacing: 0.5px;
-   line-height: 1.5;
+   letter-spacing: 0px;
+   line-height: 134%;
+   /* From Figma */
 }
 
 .hint-controls {
@@ -1414,12 +1416,13 @@ html {
    border: none;
    color: var(--color-cream);
    text-decoration: underline;
-   font-size: clamp(12px, 1.1vw, 16px);
-   font-weight: 700;
+   font-size: 16px;
+   font-weight: 600;
    align-self: flex-start;
    cursor: pointer;
    padding: 0;
    text-transform: uppercase;
+   letter-spacing: 0px;
    margin-top: auto;
    opacity: 0.8;
 }
@@ -1436,16 +1439,16 @@ html {
    background: rgba(0, 51, 84, 0.8);
    border: 2px solid var(--color-cream);
    color: var(--color-cream);
-   padding: 0.8rem 1.2rem;
+   padding: 10px;
    font-family: var(--font-main);
-   font-weight: 700;
-   font-size: clamp(12px, 1.1vw, 16px);
+   font-weight: 600;
+   font-size: 16px;
    text-transform: uppercase;
    text-decoration: underline;
    cursor: pointer;
    z-index: 100;
    transition: opacity 0.2s;
-   letter-spacing: 0.5px;
+   letter-spacing: 0px;
 }
 
 .hint-panel-minimized:hover {
@@ -1501,7 +1504,7 @@ html {
       left: 110px !important;
       width: 240px !important;
       min-height: 140px;
-      padding: 0.4rem;
+      padding: 10px;
    }
 
    .sliders-group {
@@ -1703,4 +1706,29 @@ html {
       width: 100%;
       height: 80px;
    }
+}
+
+/* --- QA Fixes: Memory Card Visualizer (Bogdan) --- */
+.audio-vizualizer {
+   position: relative !important;
+   width: 100% !important;
+   height: 400px !important;
+   min-height: 350px;
+   overflow: hidden !important;
+   display: flex !important;
+   justify-content: center !important;
+   align-items: center !important;
+   z-index: 10;
+}
+
+/* --- QA Fixes: Typography Standardization (Monica) --- */
+.hint-panel-minimized,
+.hint-hide-btn,
+.hint-text,
+.track-name {
+   font-size: 16px !important;
+}
+
+.hint-panel {
+   font-size: 16px !important;
 }
