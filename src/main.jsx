@@ -41,13 +41,26 @@ import MemorySphereVisualizer from './components/MemorySphereVisualizer.jsx'
 // Expose mounting function for external memory cards
 window.mountMemoryVisualizer = (container, howlInstance) => {
   if (!container) return;
+  // If already mounted, don't mount again
+  if (container._reactRoot) return container._reactRoot;
+
   const root = ReactDOM.createRoot(container);
+  container._reactRoot = root; // Store root for unmounting later
+
   root.render(
     <StrictMode>
       <MemorySphereVisualizer howlInstance={howlInstance} />
     </StrictMode>
   );
   return root;
+};
+
+window.unmountMemoryVisualizer = (container) => {
+  if (container && container._reactRoot) {
+    container._reactRoot.unmount();
+    container._reactRoot = null;
+    container.innerHTML = '';
+  }
 };
 
 // Пытаемся запуститься сразу

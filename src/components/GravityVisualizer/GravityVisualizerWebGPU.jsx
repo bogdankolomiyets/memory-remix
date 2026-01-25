@@ -242,12 +242,15 @@ function GravityVisualizerWebGPU({ analyserRef, particleCount, dpr }) {
       position.addAssign(velocity.mul(delta));
 
       // box loop
-
       const halfHalfExtent = boundHalfExtent.div(2).toVar();
       position.assign(
         mod(position.add(halfHalfExtent), boundHalfExtent).sub(halfHalfExtent)
       );
     });
+
+    // Expanding bounds to prevent accumulation at edges
+    boundHalfExtent.value = 20;
+
     updateComputeRef.current = update().compute(count);
 
     // nodes

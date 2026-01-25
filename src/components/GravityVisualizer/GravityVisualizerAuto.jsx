@@ -20,7 +20,7 @@ const checkWebGPUSupport = async () => {
       const device = await adapter.requestDevice();
       return !!device;
    } catch (e) {
-      console.warn('WebGPU check failed:', e);
+      // WebGPU check failed
       return false;
    }
 };
@@ -85,9 +85,18 @@ const GravityVisualizerAuto = (props) => {
          }
          const finalDpr = dprOverride ? parseFloat(dprOverride) : defaultDpr;
 
-         console.log(`🚀 Renderer: ${selectedBackend.toUpperCase()}${isMobile ? ' (Mobile)' : ''}`);
-         console.log(`✨ Particles: ${finalCount.toLocaleString()}`);
-         console.log(`🖥️ DPR: ${finalDpr}`);
+         /*
+          Renderer Auto-Configuration Log:
+          -------------------------------
+          - Selected Backend: ${selectedBackend.toUpperCase()}${isMobile ? ' (Mobile)' : ''}
+          - Particle Count: ${finalCount.toLocaleString()}
+          - Device Pixel Ratio (DPR): ${finalDpr}
+          
+          Optimization Note: 
+          On mobile devices, we strictly limit DPR to 1.5 (WebGPU) or 1.25 (WebGL) 
+          to maintain smooth frame rates, as high pixel density is the primary 
+          bottleneck for mobile GPU shaders.
+         */
 
          setBackend(selectedBackend);
          setConfig({ particleCount: finalCount, dpr: finalDpr, isMobile });

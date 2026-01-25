@@ -926,6 +926,24 @@ document.addEventListener("DOMContentLoaded", async function () {
         // Map 'name' field from Supabase to card text
         textEls.forEach((el) => (el.textContent = memory.name || ""));
       }
+
+      // Display PROMPTS (hint_text) if available
+      const promptEl = card.querySelector(".memory-card-prompt") || card.querySelector(".prompt-text");
+      if (promptEl) {
+        promptEl.textContent = memory.hint_text || "";
+      } else if (memory.hint_text) {
+        // If element doesn't exist, create it below the artist
+        const backContent = card.querySelector(".card-back-content-wrap");
+        if (backContent) {
+          const promptDiv = document.createElement("div");
+          promptDiv.className = "memory-card-prompt";
+          promptDiv.style.fontSize = "14px";
+          promptDiv.style.marginTop = "8px";
+          promptDiv.style.opacity = "0.7";
+          promptDiv.textContent = memory.hint_text;
+          backContent.appendChild(promptDiv);
+        }
+      }
       if (playerEl) {
         playerEl.setAttribute("data-howler-src", memory.audio_url || "");
         // Ensure the element is discoverable by the Howler init (selector [data-howler])
@@ -1209,6 +1227,13 @@ window.exitSelectedState = function exitSelectedState() {
   } catch (e) {
     console.warn("Error while resetting howler on exitSelectedState", e);
   }
+  // --- Unmount React Visualizer ---
+  const vizContainer = clickedCard.querySelector(".audio-vizualizer");
+  if (vizContainer && typeof window.unmountMemoryVisualizer === "function") {
+    window.unmountMemoryVisualizer(vizContainer);
+  }
+  // --------------------------------
+
   const others = getMemoryCards().filter((c) => c !== clickedCard);
   const innerEl = clickedCard.querySelector(".memory-card-inner");
   const selectedContent = clickedCard.querySelector(
@@ -1555,7 +1580,7 @@ window.enterSelectedState = async function enterSelectedState(clickedCard) {
   list.classList.add("--selected");
   clickedCard.classList.add("--selected");
 
-  // Переводим карточку в fixed и подготавливаем к expand анимации
+  // Transition card to fixed position and prepare for expansion animation
   clickedCard.style.position = "fixed";
   clickedCard.style.left = rect.left + "px";
   clickedCard.style.top = rect.top + "px";
@@ -1568,6 +1593,20 @@ window.enterSelectedState = async function enterSelectedState(clickedCard) {
     onComplete: () => {
       isAnimating = false;
       clickedCard.classList.add("is-expanded");
+
+      // --- Mount React Visualizer ---
+      const vizContainer = clickedCard.querySelector(".audio-vizualizer");
+      if (vizContainer && typeof window.mountMemoryVisualizer === "function") {
+        const howlerEl = clickedCard.querySelector(".howler-player,[data-howler]");
+        if (howlerEl) {
+          const hid = howlerEl.id;
+          const howlInstance = window.howlerSoundInstances ? window.howlerSoundInstances[hid] : null;
+          if (howlInstance) {
+            window.mountMemoryVisualizer(vizContainer, howlInstance);
+          }
+        }
+      }
+      // --------------------------------
     },
   });
 
@@ -2276,8 +2315,11 @@ function initHowlerJSAudioPlayer() {
   window.howlerSoundInstances = window.howlerSoundInstances || {};
 
   howlerElements.forEach((element, index) => {
-    const uniqueId = element.id || `howler-${Date.now()}-${index}`;
+    const uniqueId = element.id || `howler-${index}`;
+    if (element.getAttribute("data-howler-initialized") === "true") return;
+
     element.id = uniqueId;
+    element.setAttribute("data-howler-initialized", "true");
     element.setAttribute("data-howler-status", "not-playing");
 
     const audioSrc = element.getAttribute("data-howler-src");
@@ -2347,16 +2389,6 @@ function initHowlerJSAudioPlayer() {
     });
 
     window.howlerSoundInstances[uniqueId] = sound;
-
-    // Inject 3D Visualizer - .audio-vizualizer is a sibling, not a child
-    const parentContainer = element.closest(".play-controls");
-    const vizContainer = parentContainer ? parentContainer.querySelector(".audio-vizualizer") : null;
-    console.log("[DEBUG] Viz container found:", vizContainer, "mountFn exists:", typeof window.mountMemoryVisualizer);
-    if (vizContainer && typeof window.mountMemoryVisualizer === "function") {
-      console.log("[DEBUG] Mounting 3D visualizer...");
-      vizContainer.innerHTML = ""; // Clear placeholder
-      window.mountMemoryVisualizer(vizContainer, sound);
-    }
 
     // -----------------------------
     // FUNCTIONS
