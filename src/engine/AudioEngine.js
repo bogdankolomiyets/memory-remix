@@ -41,7 +41,7 @@ class AudioEngine {
       this.micGain.gain.value = 1.0;
 
       // Connection Routing
-      this.metronomeGain.connect(this.masterOut); 
+      this.metronomeGain.connect(this.masterOut);
       this.masterGain.connect(this.masterOut);
       this.userGain.connect(this.masterOut);
 
@@ -96,12 +96,12 @@ class AudioEngine {
       this.recordedSequence = [];     // List of drum hits: [{type: 'kick', time: RELATIVE_TIME}, ...]
       this.recordingStartTime = 0;    // Context time when recording started
       this.recordingOffset = 0;       // Time offset into Track 1 when recording began
-      this.userPlaybackStartTime = 0; 
-      
+      this.userPlaybackStartTime = 0;
+
       // Timing Compensation
       this.sequenceDelay = 0.085;     // Latency adjustment for drum synthesis playback (85ms)
       this.micLatencyOffset = -0.080; // Compensation for mic input latency (-80ms shift)
-      
+
       this.isLooping = false;
       this.playbackSource = null;     // Voice AudioBufferSourceNode
       this.userPlaybackSource = null; // User Track AudioBufferSourceNode
@@ -290,6 +290,16 @@ class AudioEngine {
       }
    }
 
+   toggleMetronome() {
+      this.isMetronomeOn = !this.isMetronomeOn;
+      console.log('[AudioEngine] Metronome:', this.isMetronomeOn);
+      this.emit('metronome', this.isMetronomeOn);
+
+      if (this.isMetronomeOn && !this.timerID) {
+         this.startScheduler();
+      }
+   }
+
    /**
     * Advanced A-B Loop Logic.
     * 1. If not playing: Toggle full loop.
@@ -407,10 +417,10 @@ class AudioEngine {
       try {
          // Request clean audio with minimal processing for creative mixing
          const stream = await navigator.mediaDevices.getUserMedia({
-            audio: { 
-               echoCancellation: false, 
-               noiseSuppression: false, 
-               autoGainControl: false 
+            audio: {
+               echoCancellation: false,
+               noiseSuppression: false,
+               autoGainControl: false
             }
          });
          this.micNode = this.ctx.createMediaStreamSource(stream);
@@ -430,13 +440,13 @@ class AudioEngine {
       if (!this.micNode) await this.initMicrophone();
 
       this.audioChunks = [];
-      const options = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
-         ? { mimeType: 'audio/webm;codecs=opus' } 
+      const options = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+         ? { mimeType: 'audio/webm;codecs=opus' }
          : {};
       this.mediaRecorder = new MediaRecorder(this.recorderDest.stream, options);
 
-      this.mediaRecorder.ondataavailable = (e) => { 
-         if (e.data.size > 0) this.audioChunks.push(e.data); 
+      this.mediaRecorder.ondataavailable = (e) => {
+         if (e.data.size > 0) this.audioChunks.push(e.data);
       };
 
       this.mediaRecorder.onstop = async () => {
@@ -503,9 +513,9 @@ class AudioEngine {
          this.userPlaybackSource = this.ctx.createBufferSource();
          this.userPlaybackSource.buffer = this.userTrackBuffer;
          this.userPlaybackSource.connect(this.userGain);
-         
+
          if (this.userLoopState === 'ACTIVE') this.applyLoopToSource(this.userPlaybackSource);
-         
+
          this.userPlaybackSource.onended = () => {
             // Note: onended triggers only when buffer playback finishes or is manually stopped.
             if (this.isUserPlaying && this.userLoopState !== 'ACTIVE' && this.userLoop) {
