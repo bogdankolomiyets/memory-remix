@@ -63,7 +63,7 @@ document.addEventListener("DOMContentLoaded", () => {
       content: introSection.querySelector("*"),
       lerp: 0.12,
       smoothWheel: true,
-      wheelMultiplier: 0.5,
+      wheelMultiplier: 0.8,
     });
     function raf(time) {
       if (!lenisIntro) return;
