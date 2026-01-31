@@ -63,13 +63,14 @@ const GravityVisualizerAuto = (props) => {
 
          // 2. Determine Particle Count
          // Conservative limits for production safety
+         // Adjusted for Heat Reduction (-20% from previous maxes)
          let defaultCount = 0;
          if (selectedBackend === 'webgpu') {
-            // Even with WebGPU, older mobiles can't handle high counts
-            defaultCount = isMobile ? Math.pow(2, 15) : Math.pow(2, 18);
+            // Desktop: ~210k (was 262k), Mobile: ~26k (was 32k)
+            defaultCount = isMobile ? 26000 : 210000;
          } else {
-            // WebGL is heavier but desktops can handle 131k
-            defaultCount = isMobile ? Math.pow(2, 14) : Math.pow(2, 17);
+            // WebGL is heavier. Desktop: ~100k, Mobile: ~14k
+            defaultCount = isMobile ? 14000 : 100000;
          }
 
          const countOverride = params.get('particles');
@@ -78,7 +79,11 @@ const GravityVisualizerAuto = (props) => {
          // 3. Determine DPR (Device Pixel Ratio)
          // Extreme density is the main performance killer on mobile
          const dprOverride = params.get('dpr');
-         let defaultDpr = Math.min(window.devicePixelRatio, 2.0);
+
+         // HARD CAP DPR TO 1.5 GLOBALLY TO PREVENT OVERHEATING ON RETINA SCREENS
+         // This is the most effective way to reduce GPU load without visible degradation.
+         let defaultDpr = Math.min(window.devicePixelRatio, 1.5);
+
          if (isMobile && !dprOverride) {
             // Further reduce for WebGL mobile to ensure smoothness
             defaultDpr = selectedBackend === 'webgpu' ? 1.5 : 1.25;
