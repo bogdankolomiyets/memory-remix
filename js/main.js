@@ -1,4 +1,4 @@
-console.log("Script loaded");
+console.log("THIS IS DEVELOPMENT main.js");
 
 //Lenis scroll and Scroll trigger integration
 gsap.registerPlugin(ScrollTrigger);
@@ -281,7 +281,11 @@ document.addEventListener("DOMContentLoaded", () => {
     [enterScreen, introSection, mainContent].forEach(
       (l) => (l.style.zIndex = "0")
     );
-    layer.style.zIndex = "100";
+    if (layer === mainContent) {
+      layer.style.zIndex = "98";
+    } else {
+      layer.style.zIndex = "100";
+    }  
   }
 });
 
