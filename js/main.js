@@ -40,6 +40,70 @@ document.addEventListener("DOMContentLoaded", () => {
   initScrollToAnchorLenis();
 });
 
+// ======================= Microphone Permission Modal Logic =======================
+let micModalShown = false;
+let micPermissionGranted = false;
+
+async function checkMicPermission() {
+  try {
+    if (!navigator.permissions || !navigator.permissions.query) return 'prompt';
+    const result = await navigator.permissions.query({ name: 'microphone' });
+    return result.state; // 'granted', 'denied', or 'prompt'
+  } catch (e) {
+    console.warn("Permission query not supported", e);
+    return 'prompt';
+  }
+}
+
+function showMicModal() {
+  const modal = document.getElementById('mic-permission-modal');
+  const errorDiv = document.getElementById('mic-modal-error');
+
+  if (!modal) return false;
+
+  // Reset error state
+  errorDiv.classList.remove('visible');
+
+  // Show modal
+  modal.classList.add('active');
+  micModalShown = true;
+
+  return true;
+}
+
+function hideMicModal() {
+  const modal = document.getElementById('mic-permission-modal');
+  if (modal) {
+    modal.classList.remove('active');
+  }
+}
+
+function showMicModalError() {
+  const errorDiv = document.getElementById('mic-modal-error');
+  if (errorDiv) {
+    errorDiv.classList.add('visible');
+  }
+}
+
+// Setup modal button handler
+document.addEventListener("DOMContentLoaded", () => {
+  const modalBtn = document.getElementById('mic-modal-btn');
+  if (modalBtn) {
+    modalBtn.addEventListener('click', () => {
+      hideMicModal();
+    });
+  }
+});
+
+// Expose modal control for use in React components
+window.showMicPermissionModal = showMicModal;
+window.hideMicPermissionModal = hideMicModal;
+window.showMicPermissionModalError = showMicModalError;
+window.checkMicPermission = checkMicPermission;
+window.isMicPermissionGranted = () => micPermissionGranted;
+window.setMicPermissionGranted = (granted) => { micPermissionGranted = granted; };
+
+
 //--Logic for showing and hiding: Enter, Intro and Main
 document.addEventListener("DOMContentLoaded", () => {
   const enterScreen = document.querySelector(".enter-website.layer");
@@ -284,7 +348,7 @@ document.addEventListener("DOMContentLoaded", () => {
       layer.style.zIndex = "98";
     } else {
       layer.style.zIndex = "100";
-    }  
+    }
   }
 });
 
@@ -995,7 +1059,33 @@ document.addEventListener("DOMContentLoaded", async function () {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      const data = await response.json();
+      let data = await response.json();
+
+      // --- MOCK DATA INJECTION ---
+      if (!data || data.length === 0) {
+        console.log("Database empty, using MOCK data for testing...");
+        data = [
+          {
+            id: "mock-1",
+            name: "Mock User",
+            title: "Test Memory Card",
+            audio_url: "https://cdn.jsdelivr.net/gh/bogdankolomiyets/memory-remix@main/assets/music/background%20music.mp3",
+            hint_text: "This is a simulated memory entry to test the card layout.",
+            created_at: new Date().toISOString(),
+            status: "approved"
+          },
+          {
+            id: "mock-2",
+            name: "Another User",
+            title: "Second Memory",
+            audio_url: "",
+            hint_text: "Another mock card to see the grid layout.",
+            created_at: new Date().toISOString(),
+            status: "approved"
+          }
+        ];
+      }
+
       console.log("Loaded memories from Supabase:", data?.length || 0, data);
       renderCards(data || []);
       // Re-initialize Howler players for dynamically loaded cards

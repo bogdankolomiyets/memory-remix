@@ -10,7 +10,7 @@ const TrackControlPanel = ({ trackId, activeHintTarget }) => {
       // Separate Controls
       userVolume, recordVolume, setUserVolume, setRecordVolume,
       userPitch, recordPitch, setUserPitch, setRecordPitch,
-      userLoop, userLoopState, recordLoop, toggleUserLoop, toggleRecordLoop,
+      userLoop, userLoopState, recordLoop, recordLoopState, toggleUserLoop, toggleRecordLoop,
       // Per-track Playback
       isUserPlaying, isRecordPlaying,
       toggleUserPlay, toggleRecordPlay,
@@ -26,9 +26,11 @@ const TrackControlPanel = ({ trackId, activeHintTarget }) => {
    const currentVolume = isTrack1 ? userVolume : recordVolume;
    const currentPitch = isTrack1 ? userPitch : recordPitch;
    // Loop State Logic
-   const isLooping = isTrack1 ? (userLoopState === 'ACTIVE' || userLoopState === 'RECORDING') : recordLoop;
-   const loopLabel = (isTrack1 && userLoopState === 'RECORDING') ? 'REC' : 'LOOP';
-   const loopActiveColor = (isTrack1 && userLoopState === 'RECORDING') ? '#e74c3c' : '#063A5C';
+   // Track 1 (User): Simple boolean
+   // Track 2 (Voice): A/B Loop State
+   const isLooping = isTrack1 ? userLoop : (recordLoopState === 'ACTIVE' || recordLoopState === 'RECORDING');
+   const loopLabel = (!isTrack1 && recordLoopState === 'RECORDING') ? 'REC' : 'LOOP';
+   const loopActiveColor = (!isTrack1 && recordLoopState === 'RECORDING') ? '#e74c3c' : '#063A5C';
    const isCurrentTrackPlaying = isTrack1 ? isUserPlaying : isRecordPlaying;
 
    // Play button is disabled if no audio to play
@@ -70,12 +72,49 @@ const TrackControlPanel = ({ trackId, activeHintTarget }) => {
       else toggleRecordLoop();
    };
 
-   const handleMainButtonClick = () => {
+   const handleMainButtonClick = async () => {
       if (isTrack1) {
          if (fileInputRef.current) fileInputRef.current.click();
       } else {
-         if (isRecording) stopRecording();
-         else startRecording();
+         if (isRecording) {
+            stopRecording();
+         } else {
+            // Check permission status first
+            let permissionState = 'prompt';
+            if (window.checkMicPermission) {
+               permissionState = await window.checkMicPermission();
+            }
+
+            if (permissionState === 'granted') {
+               // Permission already granted, just init and start
+               await startRecording();
+               if (window.setMicPermissionGranted) window.setMicPermissionGranted(true);
+            } else {
+               // Show modal for 'prompt' or 'denied'
+               if (window.showMicPermissionModal) {
+                  window.showMicPermissionModal();
+               }
+
+               // If it's already explicitly denied, we show the modal with error immediately
+               if (permissionState === 'denied') {
+                  if (window.showMicPermissionModalError) window.showMicPermissionModalError();
+                  return;
+               }
+
+               // For 'prompt': The modal is shown. START REC click is a user gesture.
+               // We trigger startRecording (which calls getUserMedia) while the modal is up.
+               try {
+                  await startRecording();
+                  // SUCCESS: hide modal
+                  if (window.setMicPermissionGranted) window.setMicPermissionGranted(true);
+                  if (window.hideMicPermissionModal) window.hideMicPermissionModal();
+               } catch (error) {
+                  console.error('[ControlsLeft] Microphone initialization failed:', error);
+                  // ERROR: Keep modal visible but show error message
+                  if (window.showMicPermissionModalError) window.showMicPermissionModalError();
+               }
+            }
+         }
       }
    };
 
@@ -240,17 +279,18 @@ const TrackControlPanel = ({ trackId, activeHintTarget }) => {
                let label = loopLabel;
 
                if (isTrack1) {
-                  if (userLoopState === 'RECORDING') {
-                     stateClass = 'recording';
-                     iconColor = '#e74c3c'; // red
-                  } else if (userLoopState === 'ACTIVE') {
+                  // Track 1 (User): Simple Toggle
+                  if (userLoop) {
                      stateClass = 'looping';
                      iconColor = '#f9ffeb';
                      label = 'LOOPING';
                   }
                } else {
-                  // Track 2 (Simple Toggle)
-                  if (recordLoop) {
+                  // Track 2 (Voice): A/B Loop State
+                  if (recordLoopState === 'RECORDING') {
+                     stateClass = 'recording';
+                     iconColor = '#e74c3c'; // red
+                  } else if (recordLoopState === 'ACTIVE') {
                      stateClass = 'looping';
                      iconColor = '#f9ffeb';
                      label = 'LOOPING';

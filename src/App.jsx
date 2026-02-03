@@ -41,31 +41,48 @@ function App({ debugMode, samples }) {
       setPendingTrackSwitch(null);
    };
 
-   // Trigger microphone permission when user reaches the mic-setup hint OR automatically if already granted
+   // Trigger microphone modal when user reaches mic-setup hint
    useEffect(() => {
-      // Browsers block AudioContext auto-start. We need a user gesture.
-      // Init mic on the FIRST click anywhere on the page if not already done.
-      const handleFirstInteraction = () => {
-         audioEngine.initMicrophone();
-         // Remove listener after first attempt
-         window.removeEventListener('click', handleFirstInteraction);
-         window.removeEventListener('touchstart', handleFirstInteraction);
+      const initMicWithModal = async () => {
+         // Show modal when mic-setup hint (index 5) becomes active
+         if (activeHintIndex === 5) {
+            // Check permission status first
+            let permissionState = 'prompt';
+            if (window.checkMicPermission) {
+               permissionState = await window.checkMicPermission();
+            }
+
+            if (permissionState === 'granted') {
+               // Permission already granted, just init
+               audioEngine.initMicrophone();
+               if (window.setMicPermissionGranted) window.setMicPermissionGranted(true);
+            } else {
+               // Show modal for 'prompt' or 'denied'
+               if (window.showMicPermissionModal) {
+                  window.showMicPermissionModal();
+               }
+
+               // If it's explicitly denied, show error immediately
+               if (permissionState === 'denied') {
+                  if (window.showMicPermissionModalError) window.showMicPermissionModalError();
+                  return;
+               }
+
+               // For 'prompt': trigger init (browser prompt appears)
+               try {
+                  await audioEngine.initMicrophone();
+                  // SUCCESS: hide modal
+                  if (window.setMicPermissionGranted) window.setMicPermissionGranted(true);
+                  if (window.hideMicPermissionModal) window.hideMicPermissionModal();
+               } catch (error) {
+                  console.error('[App] Microphone init failed:', error);
+                  // ERROR: show error in modal
+                  if (window.showMicPermissionModalError) window.showMicPermissionModalError();
+               }
+            }
+         }
       };
-
-      window.addEventListener('click', handleFirstInteraction);
-      window.addEventListener('touchstart', handleFirstInteraction);
-
-      return () => {
-         window.removeEventListener('click', handleFirstInteraction);
-         window.removeEventListener('touchstart', handleFirstInteraction);
-      };
-   }, []);
-
-   useEffect(() => {
-      // Also explicitly trigger on mic-setup hint (index 5) for new users
-      if (activeHintIndex === 5) {
-         audioEngine.initMicrophone();
-      }
+      initMicWithModal();
    }, [activeHintIndex]);
 
 
@@ -131,10 +148,6 @@ function App({ debugMode, samples }) {
             />
          </div>
 
-         {/* Mic Permission Highlight Area - Shows when mic-setup hint is active */}
-         {activeTarget === 'mic-permission-area' && (
-            <div className="mic-permission-area hint-highlight-box" />
-         )}
 
          {debugMode && <DebugLatency />}
 
