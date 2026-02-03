@@ -29,7 +29,7 @@ const hints = [
    // New Hints
    {
       id: 'mic-setup',
-      target: 'mic-permission-area', // Highlight area where browser permission dialog appears
+      target: null, // Removed highlight area for mic permission
       text: 'TURN ON YOUR MICROPHONE, IF IT ISN\'T ON ALREADY'
    },
    {
