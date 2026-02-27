@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AdminApiError,
   getSubmissionById,
@@ -36,6 +36,263 @@ function toUserError(error) {
   return "Admin API request failed.";
 }
 
+function formatAudioTime(seconds) {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return "0:00";
+  }
+
+  const totalSeconds = Math.floor(seconds);
+  const mins = Math.floor(totalSeconds / 60);
+  const secs = totalSeconds % 60;
+  return `${mins}:${String(secs).padStart(2, "0")}`;
+}
+
+function PlayIcon() {
+  return (
+    <svg className="admin-audio-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M8 5v14l11-7z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function PauseIcon() {
+  return (
+    <svg className="admin-audio-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <rect x="7" y="5" width="4" height="14" rx="1" fill="currentColor" />
+      <rect x="13" y="5" width="4" height="14" rx="1" fill="currentColor" />
+    </svg>
+  );
+}
+
+function VolumeIcon() {
+  return (
+    <svg className="admin-audio-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" />
+      <path
+        d="M16 8.5a4.5 4.5 0 0 1 0 7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+      <path
+        d="M18.5 6a8 8 0 0 1 0 12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function MuteIcon() {
+  return (
+    <svg className="admin-audio-icon" viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor" />
+      <path
+        d="M16 9l5 6M21 9l-5 6"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function AudioPlayer({ src }) {
+  const audioRef = useRef(null);
+  const previousVolumeRef = useRef(1);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [isMuted, setIsMuted] = useState(false);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    audio.pause();
+    audio.currentTime = 0;
+    audio.preload = "auto";
+    audio.load();
+
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setVolume(1);
+    setIsMuted(false);
+  }, [src]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return undefined;
+
+    const handleLoadedMetadata = () => {
+      setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+    };
+    const handleDurationChange = () => {
+      setDuration(Number.isFinite(audio.duration) ? audio.duration : 0);
+    };
+    const handleTimeUpdate = () => {
+      setCurrentTime(audio.currentTime || 0);
+    };
+    const handlePlay = () => setIsPlaying(true);
+    const handlePause = () => setIsPlaying(false);
+    const handleEnded = () => setIsPlaying(false);
+    const handleVolumeChange = () => {
+      setVolume(audio.volume);
+      setIsMuted(audio.muted || audio.volume === 0);
+    };
+
+    audio.addEventListener("loadedmetadata", handleLoadedMetadata);
+    audio.addEventListener("durationchange", handleDurationChange);
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("play", handlePlay);
+    audio.addEventListener("pause", handlePause);
+    audio.addEventListener("ended", handleEnded);
+    audio.addEventListener("volumechange", handleVolumeChange);
+
+    return () => {
+      audio.removeEventListener("loadedmetadata", handleLoadedMetadata);
+      audio.removeEventListener("durationchange", handleDurationChange);
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("pause", handlePause);
+      audio.removeEventListener("ended", handleEnded);
+      audio.removeEventListener("volumechange", handleVolumeChange);
+    };
+  }, [src]);
+
+  const togglePlay = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (audio.paused) {
+      try {
+        await audio.play();
+      } catch {
+        setIsPlaying(false);
+      }
+      return;
+    }
+
+    audio.pause();
+  };
+
+  const handleSeek = (event) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const nextTime = Number(event.target.value);
+    audio.currentTime = nextTime;
+    setCurrentTime(nextTime);
+  };
+
+  const adjustVolume = (delta) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const nextVolume = Math.max(0, Math.min(1, audio.volume + delta));
+    audio.muted = false;
+    audio.volume = nextVolume;
+    previousVolumeRef.current = nextVolume > 0 ? nextVolume : previousVolumeRef.current;
+  };
+
+  const handleVolumeSliderChange = (event) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const nextVolume = Number(event.target.value);
+    audio.volume = nextVolume;
+    audio.muted = nextVolume === 0;
+
+    if (nextVolume > 0) {
+      previousVolumeRef.current = nextVolume;
+    }
+  };
+
+  const handleMuteToggle = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (audio.muted || audio.volume === 0) {
+      audio.muted = false;
+      audio.volume = previousVolumeRef.current > 0 ? previousVolumeRef.current : 1;
+      return;
+    }
+
+    previousVolumeRef.current = audio.volume > 0 ? audio.volume : previousVolumeRef.current;
+    audio.muted = true;
+  };
+
+  const safeDuration = duration > 0 ? duration : 0;
+  const safeCurrent = Math.min(currentTime, safeDuration || 0);
+
+  return (
+    <div className="admin-audio-player-wrap">
+      <audio ref={audioRef} src={src} preload="auto" />
+      <div className="admin-audio-player-panel">
+        <input
+          className="admin-audio-progress"
+          type="range"
+          min={0}
+          max={safeDuration || 1}
+          step={0.1}
+          value={safeCurrent}
+          onChange={handleSeek}
+          aria-label="Seek audio position"
+        />
+
+        <div className="admin-audio-reference-row">
+          <button
+            type="button"
+            className="admin-audio-circle-btn"
+            onClick={togglePlay}
+            aria-label={isPlaying ? "Pause audio" : "Play audio"}
+          >
+            {isPlaying ? <PauseIcon /> : <PlayIcon />}
+          </button>
+          <div
+            className="admin-volume-control"
+            onWheel={(event) => {
+              event.preventDefault();
+              adjustVolume(event.deltaY < 0 ? 0.05 : -0.05);
+            }}
+          >
+            <button
+              type="button"
+              className="admin-audio-circle-btn"
+              onClick={handleMuteToggle}
+              aria-label={isMuted ? "Unmute audio" : "Mute audio"}
+              title={`Volume ${Math.round(volume * 100)}% (mouse wheel to adjust)`}
+            >
+              {isMuted ? <MuteIcon /> : <VolumeIcon />}
+            </button>
+            <input
+              className="admin-audio-volume-popover"
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={isMuted ? 0 : volume}
+              onChange={handleVolumeSliderChange}
+              orient="vertical"
+              aria-label="Adjust volume"
+            />
+          </div>
+          <span className="admin-audio-time-pill">
+            {formatAudioTime(safeCurrent)} / {formatAudioTime(safeDuration)}
+          </span>
+          <div className="admin-audio-spacer" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AdminApp({ onLogout }) {
   const [rows, setRows] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
@@ -48,6 +305,7 @@ function AdminApp({ onLogout }) {
   const [loadingSelectedItem, setLoadingSelectedItem] = useState(false);
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [error, setError] = useState("");
+  const selectedAudioUrl = selectedItem?.audio_url || "";
 
   const canPrevPage = offset > 0;
   const canNextPage = offset + rows.length < paginationCount;
@@ -377,8 +635,18 @@ function AdminApp({ onLogout }) {
               </div>
               <div>
                 <div className="admin-field-label">Audio URL</div>
-                <div className="admin-content-box">{selectedItem.audio_url || "-"}</div>
+                <div className="admin-content-box">{selectedAudioUrl || "-"}</div>
               </div>
+            </div>
+
+            <div className="admin-modal-section">
+              <div className="admin-field-label">Audio Player</div>
+              {selectedAudioUrl ? <AudioPlayer src={selectedAudioUrl} /> : <div className="admin-content-box">-</div>}
+              {selectedAudioUrl ? (
+                <a className="admin-audio-link" href={selectedAudioUrl} target="_blank" rel="noreferrer">
+                  Open audio in new tab
+                </a>
+              ) : null}
             </div>
 
             <div className="admin-modal-section">
@@ -422,4 +690,3 @@ function AdminApp({ onLogout }) {
 }
 
 export default AdminApp;
-
