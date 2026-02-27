@@ -403,40 +403,38 @@
 }
 
 .admin-volume-control {
-  position: relative;
   display: inline-flex;
   align-items: center;
+  gap: 0;
 }
 
 .admin-audio-volume-popover {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 8px);
-  transform: translateX(-50%);
-  width: 24px;
-  height: 108px;
+  width: 0;
+  height: 26px;
   margin: 0;
   padding: 0;
   opacity: 0;
-  pointer-events: none;
   background: transparent;
   border: none;
   outline: none;
-  transition: opacity 0.18s ease;
-  writing-mode: bt-lr;
-  -webkit-appearance: slider-vertical;
-  appearance: slider-vertical;
+  overflow: hidden;
+  pointer-events: none;
+  transition: width 0.22s ease, opacity 0.18s ease, margin-left 0.22s ease;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 .admin-volume-control:hover .admin-audio-volume-popover,
 .admin-volume-control:focus-within .admin-audio-volume-popover {
+  width: 88px;
+  margin-left: 8px;
   opacity: 1;
   pointer-events: auto;
 }
 
 .admin-audio-volume-popover::-webkit-slider-runnable-track {
-  width: 3px;
-  background: rgba(249, 255, 235, 0.5);
+  height: 3px;
+  background: rgba(249, 255, 235, 0.78);
   border: none;
   border-radius: 999px;
 }
@@ -445,6 +443,7 @@
   -webkit-appearance: none;
   width: 11px;
   height: 11px;
+  margin-top: -4px;
   border-radius: 50%;
   border: none;
   background: #f9ffeb;
@@ -452,10 +451,16 @@
 }
 
 .admin-audio-volume-popover::-moz-range-track {
-  background: rgba(249, 255, 235, 0.5);
+  height: 3px;
+  background: rgba(249, 255, 235, 0.78);
   border: none;
   border-radius: 999px;
-  width: 3px;
+}
+
+.admin-audio-volume-popover::-moz-range-progress {
+  height: 3px;
+  background: rgba(249, 255, 235, 0.92);
+  border-radius: 999px;
 }
 
 .admin-audio-volume-popover::-moz-range-thumb {

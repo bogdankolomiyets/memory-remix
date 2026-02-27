@@ -279,7 +279,6 @@ function AudioPlayer({ src }) {
               step={0.01}
               value={isMuted ? 0 : volume}
               onChange={handleVolumeSliderChange}
-              orient="vertical"
               aria-label="Adjust volume"
             />
           </div>
