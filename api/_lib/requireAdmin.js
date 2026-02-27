@@ -1,4 +1,4 @@
-import { getSupabaseAdmin } from './supabaseAdmin.js';
+import { getEnvValue, getSupabaseAdmin } from './supabaseAdmin.js';
 
 function json(res, status, body) {
   return res.status(status).json(body);
@@ -19,7 +19,7 @@ function parseBearerToken(req) {
 }
 
 function getAdminAllowlist() {
-  const raw = process.env.ADMIN_EMAIL_ALLOWLIST;
+  const raw = getEnvValue('ADMIN_EMAIL_ALLOWLIST');
   if (!raw || typeof raw !== 'string') {
     return null;
   }
