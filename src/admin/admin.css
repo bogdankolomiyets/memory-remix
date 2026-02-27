@@ -82,7 +82,9 @@
   margin: 0 auto 12px;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .admin-filter-group {
@@ -109,6 +111,25 @@
 .admin-filter-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.admin-toolbar-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-limit-label {
+  font-size: 13px;
+  color: rgba(249, 255, 235, 0.85);
+}
+
+.admin-limit-select {
+  border: 1px solid rgba(249, 255, 235, 0.35);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  color: #f9ffeb;
+  padding: 6px 10px;
 }
 
 .admin-error-banner {
@@ -278,6 +299,7 @@
   padding: 10px;
   background: rgba(0, 0, 0, 0.2);
   white-space: pre-wrap;
+  word-break: break-word;
   line-height: 1.4;
 }
 
@@ -311,10 +333,38 @@
 }
 
 .admin-meta-note {
-  max-width: 1100px;
-  margin: 8px auto 0;
   color: rgba(249, 255, 235, 0.75);
   font-size: 13px;
+}
+
+.admin-pagination {
+  max-width: 1100px;
+  margin: 10px auto 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.admin-pagination-controls {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.admin-pagination-btn {
+  border: 1px solid rgba(249, 255, 235, 0.45);
+  border-radius: 8px;
+  background: transparent;
+  color: #f9ffeb;
+  padding: 6px 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.admin-pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 @media (max-width: 760px) {

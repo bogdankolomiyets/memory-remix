@@ -1,0 +1,25 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/$1"
+    },
+    {
+      "source": "/admin",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/admin/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/admin-login",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/admin-login/",
+      "destination": "/index.html"
+    }
+  ]
+}
+

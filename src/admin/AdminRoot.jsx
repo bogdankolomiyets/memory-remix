@@ -1,15 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import AdminApp from "./AdminApp";
 import "./admin.css";
 
 const LOGIN_ROUTE = "/admin-login";
 const DASHBOARD_ROUTE = "/admin";
-
-const TEST_ADMIN_LOGIN = "admin";
-const TEST_ADMIN_PASSWORD = "admin";
-const TEST_ADMIN_STORAGE_KEY = "memory_remix_test_admin_auth";
-
 const AUTH_ERROR_TEXT = "Неверный логин или пароль";
 
 function AdminRoot() {
@@ -20,13 +15,6 @@ function AdminRoot() {
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorText, setErrorText] = useState("");
-  const [isTestAdminAuthorized, setIsTestAdminAuthorized] = useState(() => {
-    return window.localStorage.getItem(TEST_ADMIN_STORAGE_KEY) === "1";
-  });
-
-  const isAuthenticated = useMemo(() => {
-    return Boolean(session) || isTestAdminAuthorized;
-  }, [session, isTestAdminAuthorized]);
 
   const navigate = (nextPath, replace = true) => {
     if (window.location.pathname === nextPath) return;
@@ -69,33 +57,25 @@ function AdminRoot() {
   useEffect(() => {
     if (isSessionLoading) return;
 
-    if (routePath === DASHBOARD_ROUTE && !isAuthenticated) {
+    if (routePath === DASHBOARD_ROUTE && !session) {
       navigate(LOGIN_ROUTE, true);
       return;
     }
 
-    if (routePath === LOGIN_ROUTE && isAuthenticated) {
+    if (routePath === LOGIN_ROUTE && session) {
       navigate(DASHBOARD_ROUTE, true);
       return;
     }
 
     if (routePath !== LOGIN_ROUTE && routePath !== DASHBOARD_ROUTE) {
-      navigate(isAuthenticated ? DASHBOARD_ROUTE : LOGIN_ROUTE, true);
+      navigate(session ? DASHBOARD_ROUTE : LOGIN_ROUTE, true);
     }
-  }, [isAuthenticated, isSessionLoading, routePath]);
+  }, [isSessionLoading, routePath, session]);
 
   const handleLoginSubmit = async (event) => {
     event.preventDefault();
     setErrorText("");
     setIsSubmitting(true);
-
-    if (email.trim() === TEST_ADMIN_LOGIN && password === TEST_ADMIN_PASSWORD) {
-      setIsTestAdminAuthorized(true);
-      window.localStorage.setItem(TEST_ADMIN_STORAGE_KEY, "1");
-      setIsSubmitting(false);
-      navigate(DASHBOARD_ROUTE, true);
-      return;
-    }
 
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -113,8 +93,6 @@ function AdminRoot() {
   };
 
   const handleLogout = async () => {
-    setIsTestAdminAuthorized(false);
-    window.localStorage.removeItem(TEST_ADMIN_STORAGE_KEY);
     await supabase.auth.signOut();
     navigate(LOGIN_ROUTE, true);
   };
@@ -135,7 +113,7 @@ function AdminRoot() {
 
   return (
     <div className="admin-auth-page">
-      <form className="admin-auth-card" onSubmit={handleLoginSubmit} noValidate>
+      <form className="admin-auth-card" onSubmit={handleLoginSubmit}>
         <h1 className="admin-auth-title">Admin Login</h1>
 
         <label className="admin-auth-label" htmlFor="admin-email">
@@ -143,7 +121,7 @@ function AdminRoot() {
         </label>
         <input
           id="admin-email"
-          type="text"
+          type="email"
           className="admin-auth-input"
           value={email}
           onChange={(event) => setEmail(event.target.value)}

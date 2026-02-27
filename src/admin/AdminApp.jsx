@@ -1,124 +1,60 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
+import {
+  AdminApiError,
+  getSubmissionById,
+  listSubmissions,
+  updateSubmissionStatus,
+} from "./apiClient";
 
 const STATUS_LABELS = {
+  all: "All",
   approved: "Approved",
   rejected: "Rejected",
   pending: "Pending",
 };
 
-const FILTER_OPTIONS = ["pending", "approved", "rejected"];
+const FILTER_OPTIONS = ["all", "pending", "approved", "rejected"];
+const PAGE_SIZE_OPTIONS = [25, 50, 100];
 
-async function getAccessTokenFromSession() {
-  const { data, error } = await supabase.auth.getSession();
-  if (error) throw error;
-
-  const accessToken = data?.session?.access_token;
-  if (!accessToken) {
-    throw new Error("No active Supabase session.");
+function toUserError(error) {
+  if (!(error instanceof AdminApiError)) {
+    return "Unexpected error. Please try again.";
   }
 
-  return accessToken;
+  if (error.code === "unauthorized") {
+    return "Session expired. Please sign in again.";
+  }
+
+  if (error.code === "forbidden") {
+    return "Your account does not have admin access.";
+  }
+
+  if (typeof error.message === "string" && error.message.trim()) {
+    return error.message;
+  }
+
+  return "Admin API request failed.";
 }
 
 function AdminApp({ onLogout }) {
-  const [applications, setApplications] = useState([]);
-  const [selectedAppId, setSelectedAppId] = useState(null);
-  const [activeStatusFilter, setActiveStatusFilter] = useState("pending");
-  const [isLoading, setIsLoading] = useState(true);
-  const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
-  const [errorText, setErrorText] = useState("");
-  const [meta, setMeta] = useState({
-    pagination: null,
-    filter: null,
-  });
+  const [rows, setRows] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [statusFilter, setStatusFilter] = useState("pending");
+  const [limit, setLimit] = useState(50);
+  const [offset, setOffset] = useState(0);
+  const [paginationCount, setPaginationCount] = useState(0);
+  const [loadingList, setLoadingList] = useState(false);
+  const [loadingSelectedItem, setLoadingSelectedItem] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [error, setError] = useState("");
 
-  const selectedApp = useMemo(
-    () => applications.find((app) => app.id === selectedAppId) || null,
-    [applications, selectedAppId]
-  );
+  const canPrevPage = offset > 0;
+  const canNextPage = offset + rows.length < paginationCount;
 
-  const fetchSubmissions = useCallback(
-    async (statusFilter) => {
-      setIsLoading(true);
-      setErrorText("");
-
-      try {
-        const token = await getAccessTokenFromSession();
-        const response = await fetch(
-          `/api/admin/submissions?status=${encodeURIComponent(statusFilter)}`,
-          {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const payload = await response.json();
-        setApplications(Array.isArray(payload?.data) ? payload.data : []);
-        setMeta({
-          pagination: payload?.pagination || null,
-          filter: payload?.filter || null,
-        });
-      } catch (error) {
-        console.error("[Admin] Failed to load submissions:", error);
-        setApplications([]);
-        setMeta({ pagination: null, filter: null });
-        setErrorText("Failed to load submissions.");
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    []
-  );
-
-  useEffect(() => {
-    fetchSubmissions(activeStatusFilter);
-  }, [activeStatusFilter, fetchSubmissions]);
-
-  const handleUpdateStatus = async (id, newStatus) => {
-    const previousApplications = applications;
-    const previousSelected = selectedApp;
-
-    setIsUpdatingStatus(true);
-    setErrorText("");
-
-    setApplications((prev) =>
-      prev.map((app) => (app.id === id ? { ...app, status: newStatus } : app))
-    );
-
-    try {
-      const token = await getAccessTokenFromSession();
-      const response = await fetch(`/api/admin/submissions/${id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-
-      // Keep list fully in sync with active filter after status change.
-      await fetchSubmissions(activeStatusFilter);
-      setSelectedAppId((currentId) => (currentId === id ? null : currentId));
-    } catch (error) {
-      console.error("[Admin] Failed to update submission status:", error);
-      setApplications(previousApplications);
-      setSelectedAppId(previousSelected?.id || null);
-      setErrorText("Failed to update status.");
-    } finally {
-      setIsUpdatingStatus(false);
-    }
-  };
+  const selectedStatusLabel = useMemo(() => {
+    return selectedItem?.status ? STATUS_LABELS[selectedItem.status] || selectedItem.status : "";
+  }, [selectedItem]);
 
   const getStatusClassName = (status) => {
     if (status === "approved") return "admin-badge admin-badge-approved";
@@ -126,18 +62,148 @@ function AdminApp({ onLogout }) {
     return "admin-badge admin-badge-pending";
   };
 
+  const loadRows = useCallback(async () => {
+    setLoadingList(true);
+    setError("");
+
+    try {
+      const payload = await listSubmissions({ status: statusFilter, limit, offset });
+      const nextRows = Array.isArray(payload?.data) ? payload.data : [];
+
+      setRows(nextRows);
+      setPaginationCount(typeof payload?.pagination?.count === "number" ? payload.pagination.count : 0);
+
+      setSelectedItem((prev) => {
+        if (!prev) return null;
+        return nextRows.find((row) => row.id === prev.id) || prev;
+      });
+    } catch (apiError) {
+      if (apiError instanceof AdminApiError && apiError.code === "unauthorized") {
+        await onLogout();
+        return;
+      }
+
+      setRows([]);
+      setPaginationCount(0);
+      setError(toUserError(apiError));
+    } finally {
+      setLoadingList(false);
+    }
+  }, [limit, offset, onLogout, statusFilter]);
+
+  useEffect(() => {
+    loadRows();
+  }, [loadRows]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setSelectedItem(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadSelectedItem = async () => {
+      setLoadingSelectedItem(true);
+
+      try {
+        const payload = await getSubmissionById(selectedId);
+        if (cancelled) return;
+
+        const latest = payload?.data || null;
+        setSelectedItem(latest);
+
+        if (latest) {
+          setRows((prev) => prev.map((row) => (row.id === latest.id ? { ...row, ...latest } : row)));
+        }
+      } catch (apiError) {
+        if (cancelled) return;
+
+        if (apiError instanceof AdminApiError && apiError.code === "unauthorized") {
+          await onLogout();
+          return;
+        }
+
+        if (apiError instanceof AdminApiError && apiError.code === "not_found") {
+          setSelectedId(null);
+          setSelectedItem(null);
+          return;
+        }
+
+        setError(toUserError(apiError));
+      } finally {
+        if (!cancelled) {
+          setLoadingSelectedItem(false);
+        }
+      }
+    };
+
+    loadSelectedItem();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [onLogout, selectedId]);
+
+  const handleOpenDetails = (row) => {
+    setSelectedId(row.id);
+    setSelectedItem(row);
+  };
+
+  const handleUpdateStatus = async (newStatus) => {
+    if (!selectedItem) return;
+
+    const targetId = selectedItem.id;
+    const previousRows = rows;
+    const previousSelectedItem = selectedItem;
+
+    setUpdatingStatus(true);
+    setError("");
+
+    setRows((prev) =>
+      prev.map((row) => (row.id === targetId ? { ...row, status: newStatus } : row))
+    );
+    setSelectedItem((prev) => (prev ? { ...prev, status: newStatus } : prev));
+
+    try {
+      const payload = await updateSubmissionStatus(targetId, newStatus);
+      const updated = payload?.data || { id: targetId, status: newStatus };
+
+      setRows((prev) => prev.map((row) => (row.id === targetId ? { ...row, ...updated } : row)));
+      setSelectedItem((prev) => (prev ? { ...prev, ...updated } : prev));
+
+      await loadRows();
+
+      if (statusFilter !== "all" && updated.status !== statusFilter) {
+        setSelectedId(null);
+        setSelectedItem(null);
+      }
+    } catch (apiError) {
+      if (apiError instanceof AdminApiError && apiError.code === "unauthorized") {
+        await onLogout();
+        return;
+      }
+
+      setRows(previousRows);
+      setSelectedItem(previousSelectedItem);
+      setError(toUserError(apiError));
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
   const renderTableBody = () => {
-    if (isLoading) {
+    if (loadingList) {
       return (
         <tr>
           <td className="admin-empty-row" colSpan={4}>
-            Loading...
+            Loading submissions...
           </td>
         </tr>
       );
     }
 
-    if (!applications.length) {
+    if (!rows.length) {
       return (
         <tr>
           <td className="admin-empty-row" colSpan={4}>
@@ -147,8 +213,8 @@ function AdminApp({ onLogout }) {
       );
     }
 
-    return applications.map((app) => {
-      const formattedDate = new Date(app.created_at).toLocaleString("en-US", {
+    return rows.map((row) => {
+      const formattedDate = new Date(row.created_at).toLocaleString("en-US", {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
@@ -157,17 +223,13 @@ function AdminApp({ onLogout }) {
       });
 
       return (
-        <tr
-          key={app.id}
-          className="admin-row"
-          onClick={() => setSelectedAppId(app.id)}
-        >
-          <td>{app.id}</td>
-          <td>{app.name}</td>
+        <tr key={row.id} className="admin-row" onClick={() => handleOpenDetails(row)}>
+          <td>{row.id}</td>
+          <td>{row.name || "-"}</td>
           <td>{formattedDate}</td>
           <td className="admin-table-status">
-            <span className={getStatusClassName(app.status)}>
-              {STATUS_LABELS[app.status] || app.status}
+            <span className={getStatusClassName(row.status)}>
+              {STATUS_LABELS[row.status] || row.status}
             </span>
           </td>
         </tr>
@@ -190,19 +252,42 @@ function AdminApp({ onLogout }) {
             <button
               key={status}
               type="button"
-              className={`admin-filter-btn ${
-                activeStatusFilter === status ? "is-active" : ""
-              }`}
-              onClick={() => setActiveStatusFilter(status)}
-              disabled={isLoading || isUpdatingStatus}
+              className={`admin-filter-btn ${statusFilter === status ? "is-active" : ""}`}
+              onClick={() => {
+                setStatusFilter(status);
+                setOffset(0);
+              }}
+              disabled={loadingList || updatingStatus}
             >
               {STATUS_LABELS[status]}
             </button>
           ))}
         </div>
+
+        <div className="admin-toolbar-right">
+          <label className="admin-limit-label" htmlFor="admin-limit-select">
+            Per page
+          </label>
+          <select
+            id="admin-limit-select"
+            className="admin-limit-select"
+            value={limit}
+            onChange={(event) => {
+              setLimit(Number(event.target.value));
+              setOffset(0);
+            }}
+            disabled={loadingList || updatingStatus}
+          >
+            {PAGE_SIZE_OPTIONS.map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
-      {!!errorText && <p className="admin-error-banner">{errorText}</p>}
+      {!!error && <p className="admin-error-banner">{error}</p>}
 
       <div className="admin-card">
         <table className="admin-table">
@@ -218,16 +303,37 @@ function AdminApp({ onLogout }) {
         </table>
       </div>
 
-      {meta?.pagination && (
-        <p className="admin-meta-note">
-          Total: {meta.pagination.total || applications.length}
-        </p>
-      )}
+      <div className="admin-pagination">
+        <span className="admin-meta-note">
+          Showing {rows.length} of {paginationCount}
+        </span>
+        <div className="admin-pagination-controls">
+          <button
+            type="button"
+            className="admin-pagination-btn"
+            onClick={() => setOffset((prev) => Math.max(prev - limit, 0))}
+            disabled={!canPrevPage || loadingList || updatingStatus}
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            className="admin-pagination-btn"
+            onClick={() => setOffset((prev) => prev + limit)}
+            disabled={!canNextPage || loadingList || updatingStatus}
+          >
+            Next
+          </button>
+        </div>
+      </div>
 
-      {selectedApp && (
+      {selectedItem && (
         <div
           className="admin-modal-backdrop"
-          onClick={() => setSelectedAppId(null)}
+          onClick={() => {
+            setSelectedId(null);
+            setSelectedItem(null);
+          }}
           role="presentation"
         >
           <div
@@ -235,65 +341,75 @@ function AdminApp({ onLogout }) {
             onClick={(event) => event.stopPropagation()}
             role="dialog"
             aria-modal="true"
-            aria-label={`Application ${selectedApp.id}`}
+            aria-label={`Application ${selectedItem.id}`}
           >
             <div className="admin-modal-header">
-              <h2>Application Details: {selectedApp.id}</h2>
+              <h2>Application Details: {selectedItem.id}</h2>
               <button
                 type="button"
                 className="admin-close-btn"
-                onClick={() => setSelectedAppId(null)}
+                onClick={() => {
+                  setSelectedId(null);
+                  setSelectedItem(null);
+                }}
               >
                 x
               </button>
             </div>
 
+            {loadingSelectedItem && <p className="admin-meta-note">Refreshing details...</p>}
+
             <div className="admin-modal-grid">
               <div>
                 <div className="admin-field-label">Name</div>
-                <div>{selectedApp.name}</div>
+                <div>{selectedItem.name || "-"}</div>
               </div>
               <div>
                 <div className="admin-field-label">Email</div>
-                <div>{selectedApp.email}</div>
+                <div>{selectedItem.email || "-"}</div>
+              </div>
+            </div>
+
+            <div className="admin-modal-grid">
+              <div>
+                <div className="admin-field-label">Title</div>
+                <div>{selectedItem.title || "-"}</div>
+              </div>
+              <div>
+                <div className="admin-field-label">Audio URL</div>
+                <div className="admin-content-box">{selectedItem.audio_url || "-"}</div>
               </div>
             </div>
 
             <div className="admin-modal-section">
               <div className="admin-field-label">Status</div>
-              <span className={getStatusClassName(selectedApp.status)}>
-                {STATUS_LABELS[selectedApp.status] || selectedApp.status}
-              </span>
+              <span className={getStatusClassName(selectedItem.status)}>{selectedStatusLabel}</span>
             </div>
 
             <div className="admin-modal-section">
               <div className="admin-field-label">Question</div>
-              <div className="admin-content-box">
-                {selectedApp.new_question_1 || "-"}
-              </div>
+              <div className="admin-content-box">{selectedItem.new_question_1 || "-"}</div>
             </div>
 
             <div className="admin-modal-section">
               <div className="admin-field-label">Prompt</div>
-              <div className="admin-content-box">
-                {selectedApp.new_prompt_text || "-"}
-              </div>
+              <div className="admin-content-box">{selectedItem.new_prompt_text || "-"}</div>
             </div>
 
             <div className="admin-modal-actions">
               <button
                 type="button"
                 className="admin-btn admin-btn-reject"
-                onClick={() => handleUpdateStatus(selectedApp.id, "rejected")}
-                disabled={isUpdatingStatus}
+                onClick={() => handleUpdateStatus("rejected")}
+                disabled={updatingStatus}
               >
                 Reject
               </button>
               <button
                 type="button"
                 className="admin-btn admin-btn-approve"
-                onClick={() => handleUpdateStatus(selectedApp.id, "approved")}
-                disabled={isUpdatingStatus}
+                onClick={() => handleUpdateStatus("approved")}
+                disabled={updatingStatus}
               >
                 Approve
               </button>
