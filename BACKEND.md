@@ -1,308 +1,202 @@
-# Memory Remix Staging Backend Documentation
+# Memory Remix Staging - Technical Handoff (Frontend + Backend)
 
-## 1. Scope
+## 1. Current Status
 
-This document covers only backend components added for admin moderation:
+This document is a single handoff for engineering (Bogdan) and reflects the current implementation state in `memory-remix-staging`.
 
-- Supabase database migration and security policies.
-- Vercel serverless admin API routes.
-- Admin auth/authorization flow.
-- API request/response contracts.
-- Local and production setup.
+Completed:
+- Secure admin moderation backend on Vercel API routes.
+- Supabase migration for moderation status and placeholder prompt fields.
+- Strict RLS on `public.memories` (public insert only, no public read).
+- Admin frontend with login, submission list/detail, audio playback, approve/reject.
+- Route support for `/admin`, `/admin-login`, and `/dashboard` (alias).
 
-Frontend/UI behavior is intentionally out of scope.
+Not completed (waiting on client content):
+- Final client copy for prompt text/field naming.
 
-## 2. Backend Architecture
+## 2. Runtime Architecture
 
-### 2.1 Stack
+Public side:
+- Webflow-hosted widget uses built static assets from `dist/`.
+- Public submission currently sends `name`, `email`, `title`, `audio_url`, `status=pending`.
 
-- Runtime: Vercel Serverless Functions (Node.js)
-- Data/Auth: Supabase
-- DB table: `public.memories`
-- Files:
-  - `api/_lib/supabaseAdmin.js`
-  - `api/_lib/requireAdmin.js`
-  - `api/admin/submissions/index.js`
-  - `api/admin/submissions/[id].js`
-  - `supabase/migrations/20260226_memories_admin_backend.sql`
+Admin side:
+- Private admin app runs inside same frontend bundle.
+- Auth via Supabase email/password session.
+- Admin data operations go through Vercel serverless API (`/api/admin/*`).
 
-### 2.2 Auth Model
+Backend side:
+- Vercel serverless functions (`api/`) with Supabase service-role client.
+- Admin authorization enforced by bearer token + allowlist.
 
-1. Client authenticates in Supabase Auth (email/password).
-2. Client receives `access_token`.
-3. Client calls backend API with:
-   - `Authorization: Bearer <access_token>`
-4. Backend verifies token via Supabase Admin client (`auth.getUser(token)`).
-5. Backend checks admin allowlist via `ADMIN_EMAIL_ALLOWLIST`.
+## 3. Key Files
 
-If token is valid but email is not allowlisted, API returns `403`.
+Frontend admin:
+- `src/main.jsx` (admin route detection and mount)
+- `src/admin/AdminRoot.jsx` (session gate, login/logout, route guard)
+- `src/admin/AdminApp.jsx` (table, modal, audio player, approve/reject)
+- `src/admin/apiClient.js` (authorized API calls)
+- `src/admin/admin.css` (admin styles)
 
-## 3. Environment Variables
+Backend:
+- `api/_lib/supabaseAdmin.js` (service-role client + env resolution)
+- `api/_lib/requireAdmin.js` (bearer token validation + allowlist check)
+- `api/admin/submissions/index.js` (`GET` list with filters/pagination)
+- `api/admin/submissions/[id].js` (`GET` detail and `PATCH` status)
 
-Required for backend:
+Database:
+- `supabase/migrations/20260226_memories_admin_backend.sql`
 
+Routing/deploy:
+- `vercel.json` (rewrites for `/admin`, `/admin-login`, `/dashboard`, `/api/*`)
+- `build-vercel.js` (build pipeline for Webflow deployment artifact generation)
+
+## 4. Admin UX Behavior (Implemented)
+
+Login and access:
+- `/admin-login` shows email/password login form.
+- `/admin` is protected: no session redirects to `/admin-login`.
+- `/dashboard` works as alias and normalizes to `/admin`.
+- Logged-in users still require allowlisted email server-side.
+
+Submission review:
+- Status filters: `all`, `pending`, `approved`, `rejected`.
+- Pagination with per-page selector.
+- Detail modal includes:
+  - metadata (`name`, `email`, `title`)
+  - `audio_url`
+  - inline audio player (play/pause/seek/volume)
+  - action buttons: `Approve` / `Reject`
+  - placeholder fields display: `new_question_1`, `new_prompt_text`
+
+## 5. API Contract
+
+Base path:
+- `/api/admin/submissions`
+
+Auth header (all endpoints):
+- `Authorization: Bearer <supabase_access_token>`
+
+### 5.1 GET `/api/admin/submissions`
+
+Query params:
+- `status=all|pending|approved|rejected` (default `all`)
+- `limit` integer `1..200` (default `50`)
+- `offset` integer `>=0` (default `0`)
+
+Returns:
+- `200` with `{ data, pagination, filter }`
+
+### 5.2 GET `/api/admin/submissions/:id`
+
+Returns:
+- `200` with `{ data }` for one submission.
+
+### 5.3 PATCH `/api/admin/submissions/:id`
+
+Body:
+```json
+{ "status": "approved" }
+```
+or
+```json
+{ "status": "rejected" }
+```
+
+Returns:
+- `200` with `{ data, message: "status_updated" }`
+
+### 5.4 Error semantics
+
+- `400` invalid params/body/id/status
+- `401` missing/invalid/expired token
+- `403` valid token but not allowlisted
+- `404` row not found
+- `405` wrong method
+- `500` server/db configuration or query failure
+
+## 6. Database and Security
+
+Table:
+- `public.memories`
+
+Schema updates:
+- `status` normalized to enum `public.memory_status`:
+  - `pending`, `approved`, `rejected`
+- Added nullable placeholder columns:
+  - `new_question_1 text`
+  - `new_prompt_text text`
+- Index:
+  - `memories_status_created_at_idx (status, created_at desc)`
+
+RLS:
+- RLS enabled and forced on `public.memories`.
+- Existing policies dropped and replaced.
+- Public roles (`anon`, `authenticated`) can only `INSERT` with `status='pending'`.
+- Public read is blocked.
+
+## 7. Environment Variables
+
+Required frontend:
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+
+Required backend:
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `ADMIN_EMAIL_ALLOWLIST` (comma-separated emails)
 
-Frontend variables used by browser:
+Notes:
+- Service-role key must never be exposed in client code.
+- Local helper has `.env.local` fallback for dev reliability.
 
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
+## 8. Local Development and Testing
 
-### 3.1 Local `.env.local` example
+### 8.1 Which dev server to use
 
-```env
-VITE_SUPABASE_URL=https://<project-ref>.supabase.co
-VITE_SUPABASE_ANON_KEY=<anon-key>
+- `npm run dev` (Vite, usually `:5173`): frontend only.
+- `vercel dev` (usually `:3000`): frontend + serverless API.
 
-SUPABASE_URL=https://<project-ref>.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
-ADMIN_EMAIL_ALLOWLIST=admin1@example.com,admin2@example.com
-```
+To test admin end-to-end, use `vercel dev`.
 
-### 3.2 Note on local runtime behavior
+### 8.2 Minimal verification checklist
 
-Backend helper includes fallback reading from `.env.local` if runtime env is missing. This is for local debugging resilience when `vercel dev` does not inject expected variables.
+1. Login on `/admin-login` succeeds.
+2. `/admin` loads list.
+3. Detail opens for a row.
+4. Audio can play for valid `audio_url`.
+5. Approve/reject updates status.
+6. Non-allowlisted user gets `403` from API.
+7. Public anon select from `memories` is blocked by RLS.
 
-Do not rely on this fallback as a production config strategy. In production, set all backend env vars in Vercel project settings.
+## 9. Deployment Notes
 
-## 4. Database Model and Migration
+For fork workflow:
+- Do not push `dist/` on every feature iteration.
+- Push source + migration + API + admin app first.
 
-Migration file:
+For client original repo/Webflow delivery:
+1. Merge source changes.
+2. Run production build.
+3. Publish/update required static artifacts (`dist/`) if deployment flow expects committed build output.
+4. Ensure Vercel env vars are configured in target project.
 
-- `supabase/migrations/20260226_memories_admin_backend.sql`
+## 10. Prompt and Field Content Handoff (Current Reality)
 
-### 4.1 Columns added/normalized
+Current implementation uses placeholder database fields:
+- `new_question_1`
+- `new_prompt_text`
 
-Table: `public.memories`
+Admin UI already displays these fields in the detail modal.
 
-- Added nullable placeholder fields:
-  - `new_question_1 text`
-  - `new_prompt_text text`
-- `status` normalized to enum type `public.memory_status`
-  - allowed values: `pending`, `approved`, `rejected`
-  - `NOT NULL`
-  - default: `pending`
+Current behavior:
+- Public submission form includes temporary inputs for these values and submits them end-to-end (`src/components/SubmissionSidebar.jsx`, `src/hooks/useSubmission.js`).
+- If user leaves them empty, backend stores safe placeholder defaults:
+  - `[CLIENT QUESTION 1 PLACEHOLDER]`
+  - `[CLIENT PROMPT 1 PLACEHOLDER]`
 
-### 4.2 Index
+## 11. Recommendation for Next Action
 
-- `memories_status_created_at_idx` on `(status, created_at desc)`
-
-### 4.3 RLS and privileges
-
-Migration enforces strict access:
-
-- Enables and forces RLS on `public.memories`.
-- Drops old policies on `public.memories`.
-- Creates insert-only policy for `anon` and `authenticated`:
-  - insert allowed only when `status = 'pending'`
-- Revokes all table privileges for `anon` and `authenticated`, then grants only `INSERT`.
-
-Result:
-
-- Public clients cannot list/read submissions directly from DB.
-- Public clients can create pending submissions.
-- Admin APIs work with service role key server-side.
-
-## 5. API Endpoints
-
-Base path:
-
-- `/api/admin/submissions`
-
-All endpoints require:
-
-- Header: `Authorization: Bearer <supabase_access_token>`
-
-Response content type:
-
-- `application/json`
-
-### 5.1 List submissions
-
-- Method: `GET`
-- Path: `/api/admin/submissions`
-- Query params:
-  - `status`: `all | pending | approved | rejected` (default `all`)
-  - `limit`: `1..200` (default `50`)
-  - `offset`: `>=0` (default `0`)
-
-Success `200`:
-
-```json
-{
-  "data": [
-    {
-      "id": "uuid",
-      "created_at": "2026-02-14T02:37:33.195593+00:00",
-      "name": "string|null",
-      "email": "string|null",
-      "title": "string|null",
-      "audio_url": "string|null",
-      "status": "pending|approved|rejected",
-      "new_question_1": "string|null",
-      "new_prompt_text": "string|null"
-    }
-  ],
-  "pagination": {
-    "limit": 50,
-    "offset": 0,
-    "count": 123
-  },
-  "filter": {
-    "status": "all"
-  }
-}
-```
-
-Errors:
-
-- `400` invalid query params
-- `401` missing/invalid token
-- `403` user not in allowlist
-- `405` wrong method (`Allow: GET`)
-- `500` server/db error
-
-### 5.2 Get submission by id
-
-- Method: `GET`
-- Path: `/api/admin/submissions/:id`
-- `id` must be UUID
-
-Success `200`:
-
-```json
-{
-  "data": {
-    "id": "uuid",
-    "created_at": "2026-02-14T02:37:33.195593+00:00",
-    "name": "string|null",
-    "email": "string|null",
-    "title": "string|null",
-    "audio_url": "string|null",
-    "status": "pending|approved|rejected",
-    "new_question_1": "string|null",
-    "new_prompt_text": "string|null"
-  }
-}
-```
-
-Errors:
-
-- `400` invalid `id`
-- `401` unauthorized
-- `403` forbidden
-- `404` not found
-- `405` wrong method (`Allow: GET, PATCH`)
-- `500` server/db error
-
-### 5.3 Update moderation status
-
-- Method: `PATCH`
-- Path: `/api/admin/submissions/:id`
-- Body:
-
-```json
-{
-  "status": "approved"
-}
-```
-
-Allowed status values for PATCH:
-
-- `approved`
-- `rejected`
-
-Success `200`:
-
-```json
-{
-  "data": {
-    "id": "uuid",
-    "created_at": "2026-02-14T02:37:33.195593+00:00",
-    "name": "string|null",
-    "email": "string|null",
-    "title": "string|null",
-    "audio_url": "string|null",
-    "status": "approved",
-    "new_question_1": "string|null",
-    "new_prompt_text": "string|null"
-  },
-  "message": "status_updated"
-}
-```
-
-Errors:
-
-- `400` invalid id/body/status
-- `401` unauthorized
-- `403` forbidden
-- `404` not found
-- `405` wrong method
-- `500` server/db error
-
-## 6. Error Codes and Meaning
-
-- `unauthorized`: no bearer token or invalid/expired token.
-- `forbidden`: valid token, but email not in `ADMIN_EMAIL_ALLOWLIST`.
-- `server_misconfigured`: missing required backend env vars.
-- `invalid_query`: bad `status/limit/offset`.
-- `invalid_id`: invalid UUID format in route param.
-- `invalid_body`: missing JSON body or missing `status`.
-- `invalid_status`: `status` is not `approved` or `rejected`.
-- `not_found`: submission ID does not exist.
-- `db_error`: Supabase query/update failure.
-- `method_not_allowed`: unsupported HTTP method.
-
-## 7. Local Testing
-
-### 7.1 Start backend locally
-
-```bash
-vercel dev
-```
-
-### 7.2 PowerShell examples
-
-```powershell
-$token = "<ACCESS_TOKEN>"
-$id = "<UUID>"
-
-Invoke-RestMethod -Method GET `
-  -Uri "http://localhost:3000/api/admin/submissions?status=all&limit=20&offset=0" `
-  -Headers @{ Authorization = "Bearer $token" }
-
-Invoke-RestMethod -Method GET `
-  -Uri "http://localhost:3000/api/admin/submissions/$id" `
-  -Headers @{ Authorization = "Bearer $token" }
-
-Invoke-RestMethod -Method PATCH `
-  -Uri "http://localhost:3000/api/admin/submissions/$id" `
-  -Headers @{ Authorization = "Bearer $token"; "Content-Type" = "application/json" } `
-  -Body '{"status":"approved"}'
-```
-
-### 7.3 Validation checklist
-
-1. Missing token returns `401`.
-2. Non-allowlisted user returns `403`.
-3. Invalid `status` query returns `400`.
-4. Invalid `PATCH` status returns `400`.
-5. Unknown ID returns `404`.
-6. Public direct DB select on `memories` is blocked by RLS.
-
-## 8. Deployment Notes
-
-1. Set backend env vars in Vercel project.
-2. Keep `SUPABASE_SERVICE_ROLE_KEY` server-only.
-3. Never expose service role key in browser code or `VITE_*`.
-4. If Webflow uses static artifacts from `dist/`, that does not replace backend env setup in Vercel.
-
-## 9. Security Notes
-
-- Service role key has broad DB privileges. Treat as secret.
-- Admin access is controlled by both token validity and email allowlist.
-- RLS is intentionally strict to prevent public reads.
-- API routes are the only supported path for moderation actions.
-
+- Confirm with Monica whether prompt fields are user-input fields or admin/internal text fields.
+- If user-input: add two fields to public form payload and validation.
+- If internal-only: no code changes needed, just fill data from admin/database workflow when copy is delivered.
