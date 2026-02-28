@@ -1,72 +1,96 @@
-import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
-import './index.css' // Твои стили, если нужны
 import { StrictMode } from 'react'
-const MOUNT_ID = 'memory-remix';
+import App from './App.jsx'
+import AdminRoot from './admin/AdminRoot.jsx'
+import MemorySphereVisualizer from './components/MemorySphereVisualizer.jsx'
+import './index.css'
 
-// Функция инициализации
-const initPlayer = () => {
-  // Если контейнера нет, мы не падаем с ошибкой, а просто логируем это.
-  // Это полезно при отладке в Webflow.
-  const container = document.getElementById(MOUNT_ID);
+const MOUNT_ID = 'memory-remix'
+const ADMIN_ROUTES = new Set(['/admin', '/admin-login', '/dashboard'])
+const isAdminRoute = ADMIN_ROUTES.has(window.location.pathname)
+
+const mountAdmin = () => {
+  let container = document.getElementById('admin-root')
 
   if (!container) {
-    console.warn(`[Memory Remix] Container #${MOUNT_ID} not found. Waiting for DOM...`);
-    return false;
+    container = document.createElement('div')
+    container.id = 'admin-root'
+    container.style.position = 'fixed'
+    container.style.inset = '0'
+    container.style.zIndex = '2147483647'
+    document.body.appendChild(container)
   }
 
-  if (container) {
-    // Очищаем, если там был какой-то мусор от Webflow
-    container.innerHTML = '';
-
-    const debugMode = container.getAttribute('data-debug') === 'true';
-    const samples = {
-      kick: container.getAttribute('data-kick-url'),
-      snare: container.getAttribute('data-snare-url'),
-      hihat: container.getAttribute('data-hihat-url'),
-    };
-
-    ReactDOM.createRoot(container).render(
-      <StrictMode>
-        <App debugMode={debugMode} samples={samples} />
-      </StrictMode>,
-    )
-    return true;
+  if (!container._reactRoot) {
+    container._reactRoot = ReactDOM.createRoot(container)
   }
+
+  container._reactRoot.render(
+    <StrictMode>
+      <AdminRoot />
+    </StrictMode>
+  )
+
+  return true
 }
 
-import MemorySphereVisualizer from './components/MemorySphereVisualizer.jsx'
+const initPlayer = () => {
+  const container = document.getElementById(MOUNT_ID)
 
-// Expose mounting function for external memory cards
+  if (!container) {
+    console.warn(`[Memory Remix] Container #${MOUNT_ID} not found. Waiting for DOM...`)
+    return false
+  }
+
+  container.innerHTML = ''
+
+  const debugMode = container.getAttribute('data-debug') === 'true'
+  const samples = {
+    kick: container.getAttribute('data-kick-url'),
+    snare: container.getAttribute('data-snare-url'),
+    hihat: container.getAttribute('data-hihat-url'),
+  }
+
+  ReactDOM.createRoot(container).render(
+    <StrictMode>
+      <App debugMode={debugMode} samples={samples} />
+    </StrictMode>
+  )
+
+  return true
+}
+
 window.mountMemoryVisualizer = (container, howlInstance) => {
-  if (!container) return;
-  // If already mounted, don't mount again
-  if (container._reactRoot) return container._reactRoot;
+  if (!container) return
+  if (container._reactRoot) return container._reactRoot
 
-  const root = ReactDOM.createRoot(container);
-  container._reactRoot = root; // Store root for unmounting later
+  const root = ReactDOM.createRoot(container)
+  container._reactRoot = root
 
   root.render(
     <StrictMode>
       <MemorySphereVisualizer howlInstance={howlInstance} />
     </StrictMode>
-  );
-  return root;
-};
+  )
+
+  return root
+}
 
 window.unmountMemoryVisualizer = (container) => {
   if (container && container._reactRoot) {
-    container._reactRoot.unmount();
-    container._reactRoot = null;
-    container.innerHTML = '';
+    container._reactRoot.unmount()
+    container._reactRoot = null
+    container.innerHTML = ''
   }
-};
-
-// Пытаемся запуститься сразу
-const mounted = initPlayer();
-
-// Если сразу найти тег не удалось, ждем пока DOM загрузится
-if (!mounted) {
-  document.addEventListener('DOMContentLoaded', initPlayer);
 }
+
+if (isAdminRoute) {
+  mountAdmin()
+} else {
+  const mounted = initPlayer()
+
+  if (!mounted) {
+    document.addEventListener('DOMContentLoaded', initPlayer)
+  }
+}
+

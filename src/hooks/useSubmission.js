@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { supabase } from '../lib/supabaseClient';
 
+const DEFAULT_NEW_QUESTION_1 = '[CLIENT QUESTION 1 PLACEHOLDER]';
+const DEFAULT_NEW_PROMPT_TEXT = '[CLIENT PROMPT 1 PLACEHOLDER]';
+
 export const useSubmission = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
 
-  const submitMemory = async ({ audioBlob, name, email, title }) => {
+  const submitMemory = async ({ audioBlob, name, email, title, newQuestion1, newPromptText }) => {
     setIsSubmitting(true);
     setError(null);
     setSuccess(false);
@@ -46,6 +49,8 @@ export const useSubmission = () => {
             name,
             email,
             title,
+            new_question_1: (newQuestion1 || '').trim() || DEFAULT_NEW_QUESTION_1,
+            new_prompt_text: (newPromptText || '').trim() || DEFAULT_NEW_PROMPT_TEXT,
             audio_url: audioUrl,
             status: 'pending' // Enforced by default, but good to be explicit
           }
