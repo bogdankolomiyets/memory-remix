@@ -6,7 +6,7 @@ import MemorySphereVisualizer from './components/MemorySphereVisualizer.jsx'
 import './index.css'
 
 const MOUNT_ID = 'memory-remix'
-const ADMIN_ROUTES = new Set(['/admin', '/admin-login'])
+const ADMIN_ROUTES = new Set(['/admin', '/admin-login', '/dashboard'])
 const isAdminRoute = ADMIN_ROUTES.has(window.location.pathname)
 
 const mountAdmin = () => {

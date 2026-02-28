@@ -5,6 +5,7 @@ import "./admin.css";
 
 const LOGIN_ROUTE = "/admin-login";
 const DASHBOARD_ROUTE = "/admin";
+const DASHBOARD_ALIAS_ROUTE = "/dashboard";
 const AUTH_ERROR_TEXT = "Неверный логин или пароль";
 
 function AdminRoot() {
@@ -57,8 +58,13 @@ function AdminRoot() {
   useEffect(() => {
     if (isSessionLoading) return;
 
-    if (routePath === DASHBOARD_ROUTE && !session) {
+    if ((routePath === DASHBOARD_ROUTE || routePath === DASHBOARD_ALIAS_ROUTE) && !session) {
       navigate(LOGIN_ROUTE, true);
+      return;
+    }
+
+    if (routePath === DASHBOARD_ALIAS_ROUTE && session) {
+      navigate(DASHBOARD_ROUTE, true);
       return;
     }
 
@@ -67,7 +73,7 @@ function AdminRoot() {
       return;
     }
 
-    if (routePath !== LOGIN_ROUTE && routePath !== DASHBOARD_ROUTE) {
+    if (routePath !== LOGIN_ROUTE && routePath !== DASHBOARD_ROUTE && routePath !== DASHBOARD_ALIAS_ROUTE) {
       navigate(session ? DASHBOARD_ROUTE : LOGIN_ROUTE, true);
     }
   }, [isSessionLoading, routePath, session]);
@@ -107,7 +113,7 @@ function AdminRoot() {
     );
   }
 
-  if (routePath === DASHBOARD_ROUTE) {
+  if (routePath === DASHBOARD_ROUTE || routePath === DASHBOARD_ALIAS_ROUTE) {
     return <AdminApp onLogout={handleLogout} />;
   }
 

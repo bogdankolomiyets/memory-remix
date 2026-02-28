@@ -19,6 +19,14 @@
     {
       "source": "/admin-login/",
       "destination": "/index.html"
+    },
+    {
+      "source": "/dashboard",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/dashboard/",
+      "destination": "/index.html"
     }
   ]
 }
