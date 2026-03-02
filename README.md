@@ -12,13 +12,21 @@ npm install
 
 ### Development
 
-Start the development server:
+Start the frontend development server:
 
 ```bash
 npm run dev
 ```
 
 The app will open at `http://localhost:5173`
+
+Start backend serverless APIs in a separate terminal:
+
+```bash
+npx vercel dev --listen 3000
+```
+
+This serves admin endpoints at `http://localhost:3000/api/admin/*`.
 
 ### Build for Production
 
@@ -70,10 +78,27 @@ memory-remix/
 Copy `.env.example` to `.env.local` and configure:
 
 ```env
+# Frontend (browser) Supabase settings
+VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+VITE_SUPABASE_ANON_KEY=<anon-key>
+
+# Vite proxy target for /api in local dev
+VITE_API_PROXY_TARGET=http://127.0.0.1:3000
+
+# Backend serverless settings
+SUPABASE_URL=https://<project-ref>.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+ADMIN_EMAIL_ALLOWLIST=admin1@example.com,admin2@example.com
+
+# Existing project settings
 VITE_GH_USER=your-github-username
 VITE_GH_REPO=your-repo-name
 VITE_GH_BRANCH=main
 ```
+
+For admin moderation to work:
+- the signed-in Supabase email must be present in `ADMIN_EMAIL_ALLOWLIST`;
+- backend APIs must run (local `vercel dev` or deployed Vercel project).
 
 ## Git Ignore
 

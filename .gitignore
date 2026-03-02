@@ -31,3 +31,5 @@ Thumbs.db
 
 # Local mock data
 src/mock-data.js
+.vercel
+supabase/.temp/

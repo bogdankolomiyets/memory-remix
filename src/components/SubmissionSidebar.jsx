@@ -1,11 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useSubmission } from '../hooks/useSubmission';
 
+const QUESTION_PLACEHOLDER = '[CLIENT QUESTION 1 PLACEHOLDER]';
+const PROMPT_PLACEHOLDER = '[CLIENT PROMPT 1 PLACEHOLDER]';
+
 const SubmissionSidebar = ({ isOpen, onClose, audioBlob }) => {
    const [formData, setFormData] = useState({
       name: '',
       email: '',
-      title: ''
+      title: '',
+      newQuestion1: QUESTION_PLACEHOLDER,
+      newPromptText: PROMPT_PLACEHOLDER
    });
    const { submitMemory, isSubmitting, error, success } = useSubmission();
 
@@ -20,7 +25,9 @@ const SubmissionSidebar = ({ isOpen, onClose, audioBlob }) => {
          audioBlob,
          name: formData.name,
          email: formData.email,
-         title: formData.title
+         title: formData.title,
+         newQuestion1: formData.newQuestion1,
+         newPromptText: formData.newPromptText
       });
 
       if (result) {
@@ -130,7 +137,31 @@ const SubmissionSidebar = ({ isOpen, onClose, audioBlob }) => {
                      />
                   </div>
 
-                  {/* 4. Audio Status */}
+                  {/* 4. Question (Temporary Placeholder) */}
+                  <div className="form-group">
+                     <label>Question 1 (Temporary)</label>
+                     <input
+                        type="text"
+                        name="newQuestion1"
+                        value={formData.newQuestion1}
+                        onChange={handleChange}
+                        placeholder={QUESTION_PLACEHOLDER}
+                     />
+                  </div>
+
+                  {/* 5. Prompt (Temporary Placeholder) */}
+                  <div className="form-group">
+                     <label>Prompt Text (Temporary)</label>
+                     <input
+                        type="text"
+                        name="newPromptText"
+                        value={formData.newPromptText}
+                        onChange={handleChange}
+                        placeholder={PROMPT_PLACEHOLDER}
+                     />
+                  </div>
+
+                  {/* 6. Audio Status */}
                   <div className="file-drop-zone">
                      <h3>{audioBlob ? "✓ Audio Ready" : "No Audio"}</h3>
                      <p className="file-status">
@@ -138,7 +169,7 @@ const SubmissionSidebar = ({ isOpen, onClose, audioBlob }) => {
                      </p>
                   </div>
 
-                  {/* 5. Submit Button */}
+                  {/* 7. Submit Button */}
                   <button
                      className="transform-btn"
                      onClick={handleSubmit}
@@ -147,7 +178,7 @@ const SubmissionSidebar = ({ isOpen, onClose, audioBlob }) => {
                      {isSubmitting ? 'Transforming...' : 'Transform a Memory'}
                   </button>
 
-                  {/* 6. Legal Text */}
+                  {/* 8. Legal Text */}
                   <ul className="legal-text">
                      <li>Only share recordings you created or have permission to use.</li>
                      <li>Submissions can include your voice, stories, or sounds that carry personal meaning related to loss.</li>
